@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import type { CalendarEvent, Client, ContentPiece, EventType, Profile } from "@/lib/types";
+import { pieceLabel, type CalendarEvent, type Client, type ContentPiece, type EventType, type Profile } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
 
 interface EventModalProps {
@@ -20,6 +20,16 @@ interface EventModalProps {
 }
 
 const supabase = createClient()
+
+const MONTH_NAMES = [
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+];
+
+function monthOfDate(d: string): number {
+    const dt = d ? new Date(d + "T00:00:00") : new Date();
+    return dt.getMonth() + 1;
+}
 
 const EVENT_TYPE_STYLES: Record<
     EventType,
@@ -86,35 +96,61 @@ export default function EventModal({
     const isClientAllowed = eventType === "grabacion" || eventType === "junta";
     const currentStyle = EVENT_TYPE_STYLES[eventType] || EVENT_TYPE_STYLES.otro;
 
-    const currentMonthNum = useMemo(() => {
-        const d = date ? new Date(date + "T00:00:00") : new Date();
-        return d.getMonth() + 1;
-    }, [date]);
+    const realCurrentMonth = monthOfDate("");
 
-    // Genera el catálogo completo de piezas solo si hay cliente seleccionado y el evento lo permite
+    // Mes del catálogo de piezas que se está navegando -- independiente de la fecha del
+    // evento. Empieza en el mes del evento (sin poder bajar del mes real actual) y se
+    // puede avanzar a meses futuros con ‹ ›, para poder grabar piezas "adelantadas" que
+    // pertenecen al paquete de un mes que todavía no llega (ver isAdvancePiece en Entregas).
+    const [catalogMonth, setCatalogMonth] = useState<number>(realCurrentMonth);
+    const canGoToPrevCatalogMonth = catalogMonth > realCurrentMonth;
+    const goToPrevCatalogMonth = () => {
+        if (canGoToPrevCatalogMonth) setCatalogMonth((m) => m - 1);
+    };
+    const goToNextCatalogMonth = () => setCatalogMonth((m) => (m % 12) + 1);
+
+    // Genera el catálogo de piezas para el cliente+mes que se está navegando: una
+    // plantilla base de 4 video + 4 foto (para poder agendar piezas del paquete que
+    // todavía no se han creado a mano), más cualquier pieza REAL de ese cliente+mes
+    // que ya exista en la base y no esté cubierta por la plantilla -- piezas
+    // individuales creadas en Entregas (con cualquier número, o más allá de las 4
+    // base de un paquete grande) también deben poder agendarse aquí.
     const fullCatalogForClient = useMemo(() => {
         if (!clientId || !isClientAllowed) return [];
-        const pieces: ContentPiece[] = [];
+        const template: ContentPiece[] = [];
         for (let i = 1; i <= 4; i++) {
-            pieces.push({
+            template.push({
                 id: `gen-v-${i}`,
                 client_id: clientId,
-                code: `${currentMonthNum}.v.${i}`,
+                code: `${catalogMonth}.v.${i}`,
                 type: "v",
-                month: currentMonthNum,
+                month: catalogMonth,
                 status: "por_grabar",
             });
-            pieces.push({
+            template.push({
                 id: `gen-f-${i}`,
                 client_id: clientId,
-                code: `${currentMonthNum}.f.${i}`,
+                code: `${catalogMonth}.f.${i}`,
                 type: "f",
-                month: currentMonthNum,
+                month: catalogMonth,
                 status: "por_grabar",
             });
         }
-        return pieces;
-    }, [clientId, currentMonthNum, isClientAllowed]);
+
+        const templateCodes = new Set(template.map((p) => p.code));
+        const realExtras = existingContentPieces.filter(
+            (p) => p.client_id === clientId && p.month === catalogMonth && !templateCodes.has(p.code)
+        );
+
+        const combined = [...template, ...realExtras];
+        combined.sort((a, b) => {
+            const [, aType, aNum] = a.code.split(".");
+            const [, bType, bNum] = b.code.split(".");
+            if (aType !== bType) return aType === "v" ? -1 : 1;
+            return (Number(aNum) || 0) - (Number(bNum) || 0);
+        });
+        return combined;
+    }, [clientId, catalogMonth, isClientAllowed, existingContentPieces]);
 
     const selectablePieces = useMemo(() => {
         if (!clientId || !isClientAllowed) return [];
@@ -124,6 +160,7 @@ export default function EventModal({
                     (p) =>
                         p.client_id === clientId &&
                         p.code === piece.code &&
+                        p.event_id &&
                         p.event_id !== selectedEvent?.id
                 )
         );
@@ -198,6 +235,7 @@ export default function EventModal({
                 setClientId("");
                 setSelectedPieceCodes([]);
             }
+            setCatalogMonth(Math.max(monthOfDate(selectedEvent.event_date), monthOfDate("")));
         } else {
             setTitle("");
             setEventType("grabacion");
@@ -209,6 +247,7 @@ export default function EventModal({
             setSelectedPieceCodes([]);
             setNotes("");
             setSelectedMemberIds([]);
+            setCatalogMonth(Math.max(monthOfDate(selectedDate), monthOfDate("")));
         }
     }, [selectedEvent, selectedDate, isOpen, clients]);
 
@@ -346,10 +385,32 @@ export default function EventModal({
                     {/* Catálogo de piezas para Grabación y Junta */}
                     {isClientAllowed && clientId && (
                         <div className="rounded-md border border-line bg-panel2/40 p-3 space-y-2">
-                            <div className="flex items-center justify-between">
-                                <label className="block text-xs font-medium text-muted">
-                                    Piezas a Grabar este día (Mes {currentMonthNum})
-                                </label>
+                            <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-1.5">
+                                    <label className="text-xs font-medium text-muted">
+                                        Piezas a grabar
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={goToPrevCatalogMonth}
+                                        disabled={!canGoToPrevCatalogMonth}
+                                        aria-label="Mes anterior"
+                                        className="rounded px-1.5 py-0.5 text-xs text-muted hover:text-text hover:bg-panel disabled:opacity-30 disabled:hover:bg-transparent"
+                                    >
+                                        ‹
+                                    </button>
+                                    <span className="text-xs font-semibold text-text min-w-[5.5rem] text-center">
+                                        {MONTH_NAMES[catalogMonth - 1]}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={goToNextCatalogMonth}
+                                        aria-label="Mes siguiente"
+                                        className="rounded px-1.5 py-0.5 text-xs text-muted hover:text-text hover:bg-panel"
+                                    >
+                                        ›
+                                    </button>
+                                </div>
                                 {selectablePieces.length > 0 && (
                                     <button
                                         type="button"
@@ -361,12 +422,23 @@ export default function EventModal({
                                 )}
                             </div>
 
+                            {catalogMonth !== monthOfDate(date) && (
+                                <p className="text-[11px] text-amber-400/90 px-0.5">
+                                    Grabando piezas de {MONTH_NAMES[catalogMonth - 1]} por adelantado.
+                                </p>
+                            )}
+
                             <div className="flex flex-wrap gap-2">
                                 {fullCatalogForClient.map((piece) => {
+                                    const realPiece = existingContentPieces.find(
+                                        (p) => p.client_id === clientId && p.code === piece.code
+                                    );
+
                                     const isRecordedElsewhere = existingContentPieces.some(
                                         (p) =>
                                             p.client_id === clientId &&
                                             p.code === piece.code &&
+                                            p.event_id &&
                                             p.event_id !== selectedEvent?.id
                                     );
 
@@ -379,7 +451,7 @@ export default function EventModal({
                                             disabled={isRecordedElsewhere}
                                             onClick={() => togglePiece(piece.code)}
                                             className={[
-                                                "px-2.5 py-1 text-xs font-mono rounded-md border transition flex items-center gap-1",
+                                                "max-w-[10rem] px-2.5 py-1 text-xs font-mono rounded-md border transition flex items-center gap-1",
                                                 isRecordedElsewhere
                                                     ? "opacity-40 bg-zinc-800 border-zinc-700 text-zinc-500 cursor-not-allowed line-through"
                                                     : isSelected
@@ -387,7 +459,7 @@ export default function EventModal({
                                                         : "bg-panel border-line text-text hover:border-brand2/60",
                                             ].join(" ")}
                                         >
-                                            {piece.code}
+                                            <span className="truncate">{pieceLabel(realPiece ?? piece)}</span>
                                         </button>
                                     );
                                 })}

@@ -70,20 +70,35 @@ export async function saveEventToSupabase(
   }
 
   // 4. Vincular las piezas seleccionadas actualmente al evento (sin tocar su status).
+  // El picker ahora permite elegir piezas de meses distintos al de la fecha del evento
+  // (piezas "adelantadas"), así que el mes de cada una se calcula por separado -- ya no
+  // se puede asumir que todas comparten el mes de la primera. Tampoco se toca el mes de
+  // una pieza que YA existe en la base: pudo haberse editado a mano (ver ContentPieceModal)
+  // y no debe resetearse cada vez que el evento se vuelve a guardar.
+  const { data: existingRows } = await supabase
+    .from("content_pieces")
+    .select("code")
+    .eq("client_id", eventData.client_id)
+    .in("code", pieceCodes);
+  const alreadyExists = new Set((existingRows ?? []).map((r) => r.code));
+
   for (const code of pieceCodes) {
-    const monthNum = Number(pieceCodes[0].split(".")[0]);
-    await supabase
-      .from("content_pieces")
-      .upsert(
-        {
-          client_id: eventData.client_id,
-          event_id: savedEvent.id,
-          code: code,
-          type: code.includes(".v.") ? "v" : "f",
-          month: monthNum,
-        },
-        { onConflict: "client_id,code" }
-      );
+    if (alreadyExists.has(code)) {
+      await supabase
+        .from("content_pieces")
+        .update({ event_id: savedEvent.id })
+        .eq("client_id", eventData.client_id)
+        .eq("code", code);
+    } else {
+      const monthNum = Number(code.split(".")[0]);
+      await supabase.from("content_pieces").insert({
+        client_id: eventData.client_id,
+        event_id: savedEvent.id,
+        code: code,
+        type: code.includes(".v.") ? "v" : "f",
+        month: monthNum,
+      });
+    }
   }
 
   // 5. Guardar los miembros del evento. Funciona igual para crear y editar, porque

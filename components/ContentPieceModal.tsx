@@ -3,11 +3,21 @@
 import { useState, useEffect } from "react";
 import { pieceLabel, type ContentPiece } from "@/lib/types";
 
+const MONTH_NAMES = [
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+];
+
 interface ContentPieceModalProps {
   isOpen: boolean;
   onClose: () => void;
   piece: ContentPiece | null;
-  onSave: (pieceId: string, dueDate: string | null, displayName: string | null) => Promise<void> | void;
+  onSave: (
+    pieceId: string,
+    dueDate: string | null,
+    displayName: string | null,
+    month: number
+  ) => Promise<void> | void;
 }
 
 export default function ContentPieceModal({
@@ -18,11 +28,13 @@ export default function ContentPieceModal({
 }: ContentPieceModalProps) {
   const [dueDate, setDueDate] = useState<string>("");
   const [displayName, setDisplayName] = useState<string>("");
+  const [month, setMonth] = useState<number>(1);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setDueDate(piece?.due_date ?? "");
     setDisplayName(piece?.display_name ?? "");
+    setMonth(piece?.month ?? new Date().getMonth() + 1);
   }, [piece]);
 
   if (!isOpen || !piece) return null;
@@ -32,7 +44,7 @@ export default function ContentPieceModal({
   const handleSave = async () => {
     setSaving(true);
     try {
-      await onSave(piece.id, dueDate || null, displayName.trim() || null);
+      await onSave(piece.id, dueDate || null, displayName.trim() || null, month);
       onClose();
     } finally {
       setSaving(false);
@@ -81,6 +93,23 @@ export default function ContentPieceModal({
             <span className="text-sm font-normal text-muted font-mono">
               {piece.code}
             </span>
+          </div>
+
+          <div className="rounded-xl bg-panel2/60 px-4 py-3 border border-line/40 space-y-1.5">
+            <span className="block text-xs font-bold uppercase tracking-wider text-muted">
+              Mes al que pertenece
+            </span>
+            <select
+              value={month}
+              onChange={(e) => setMonth(Number(e.target.value))}
+              className="w-full rounded-md border border-line bg-panel px-3 py-2 text-sm text-text outline-none focus:border-brand2"
+            >
+              {MONTH_NAMES.map((name, i) => (
+                <option key={name} value={i + 1}>
+                  {name}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="rounded-xl bg-panel2/60 px-4 py-3 border border-line/40 space-y-1.5">

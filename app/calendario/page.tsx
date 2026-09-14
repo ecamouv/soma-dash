@@ -16,6 +16,7 @@ import {
   deleteEventFromSupabase,
   sendInvitations,
 } from "@/lib/events";
+import { fetchContentPieces } from "@/lib/deliveries";
 import { createClient } from "@/lib/supabase/client";
 
 export default function DashboardPage() {
@@ -91,15 +92,23 @@ export default function DashboardPage() {
 
   // 2. Cargar datos del calendario. Los clientes pausados se filtran por completo:
   // no aparecen en el selector ni sus eventos/piezas en el calendario.
+  //
+  // contentPieces se trae completo (todas las piezas de todos los clientes), no solo
+  // las que ya están ligadas a un evento -- si no, las piezas individuales creadas a
+  // mano en Entregas (sin evento todavía, o más allá de las 4 base de un paquete
+  // grande) nunca aparecían como seleccionables en el picker de EventModal. Al
+  // recargar (que ya pasa después de guardar un evento y al montar la página)
+  // cualquier pieza nueva agregada desde Entregas queda visible aquí.
   const loadData = async () => {
-    const [clientsData, eventsData] = await Promise.all([
+    const [clientsData, eventsData, piecesData] = await Promise.all([
       fetchClients(),
       fetchEvents(),
+      fetchContentPieces(),
     ]);
     const activeEvents = eventsData.filter((e) => !e.client?.paused);
     setClients(clientsData.filter((c) => !c.paused));
     setEvents(activeEvents);
-    setContentPieces(activeEvents.flatMap((e) => e.content_pieces || []));
+    setContentPieces(piecesData.filter((p) => !p.client?.paused));
   };
 
   useEffect(() => {

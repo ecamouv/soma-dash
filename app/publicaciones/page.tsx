@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
 import ContentPieceModal from "@/components/ContentPieceModal";
-import { pieceLabel, type ContentPiece, type Client } from "@/lib/types";
+import { pieceLabel, type ContentPiece, type Client, type Profile } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
 import { updatePieceStatus, updatePieceDueDateAndName } from "@/lib/deliveries";
 
@@ -37,7 +38,12 @@ function buildGrid(month: Date): Date[] {
 }
 
 export default function PublicacionesPage() {
+  const router = useRouter();
   const supabase = createClient();
+
+  const [currentUser, setCurrentUser] = useState<Profile | null>(null);
+  const [loadingAuth, setLoadingAuth] = useState(true);
+
   const [pieces, setPieces] = useState<ContentPiece[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>("all");
@@ -69,9 +75,50 @@ export default function PublicacionesPage() {
     setLoading(false);
   };
 
+  // 1. Validar sesión y obtener Perfil real desde public.profiles
   useEffect(() => {
-    loadData();
-  }, []);
+    const checkUser = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.push("/login");
+        return;
+      }
+
+      const { data: userProfile } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single();
+
+      setCurrentUser(
+        (userProfile as Profile) || {
+          id: user.id,
+          email: user.email || "",
+          full_name: user.email?.split("@")[0] || "Usuario",
+          role: "prod",
+          initials: (user.email || "U").substring(0, 2).toUpperCase(),
+        }
+      );
+      setLoadingAuth(false);
+    };
+
+    checkUser();
+  }, [router, supabase]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  };
+
+  useEffect(() => {
+    if (!loadingAuth) {
+      loadData();
+    }
+  }, [loadingAuth]);
 
   const filteredPieces = useMemo(() => {
     if (selectedClientId === "all") return pieces;
@@ -132,20 +179,26 @@ export default function PublicacionesPage() {
 
   const handleAssignDueDate = async (pieceId: string, dueDate: string | null) => {
     const piece = pieces.find((p) => p.id === pieceId);
-    return handleSavePiece(pieceId, dueDate, piece?.display_name ?? null);
+    return handleSavePiece(
+      pieceId,
+      dueDate,
+      piece?.display_name ?? null,
+      piece?.month ?? new Date().getMonth() + 1
+    );
   };
 
   const handleSavePiece = async (
     pieceId: string,
     dueDate: string | null,
-    displayName: string | null
+    displayName: string | null,
+    month: number
   ) => {
     setErrorMsg(null);
     try {
-      await updatePieceDueDateAndName(pieceId, dueDate, displayName);
+      await updatePieceDueDateAndName(pieceId, dueDate, displayName, month);
       setPieces((prev) =>
         prev.map((p) =>
-          p.id === pieceId ? { ...p, due_date: dueDate, display_name: displayName } : p
+          p.id === pieceId ? { ...p, due_date: dueDate, display_name: displayName, month } : p
         )
       );
     } catch (err) {
@@ -167,19 +220,19 @@ export default function PublicacionesPage() {
     setMonth((m) => new Date(m.getFullYear(), m.getMonth() + delta, 1));
   }
 
+  if (loadingAuth || !currentUser) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-ink text-muted font-mono text-sm">
+        Cargando sesión...
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen text-text">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-y-auto bg-ink">
-        <TopBar
-          profile={{
-            id: "admin",
-            email: "admin@soma.mx",
-            full_name: "Admin Soma",
-            role: "admin",
-            initials: "AS",
-          }}
-        />
+        <TopBar profile={currentUser} onLogout={handleLogout} />
 
         <div className="p-6 space-y-6">
           {/* Header */}

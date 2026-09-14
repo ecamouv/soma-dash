@@ -3,6 +3,11 @@
 import { useState, useEffect } from "react";
 import type { Client } from "@/lib/types";
 
+const MONTH_NAMES = [
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+];
+
 interface NewPieceModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -11,6 +16,8 @@ interface NewPieceModalProps {
     clientId: string;
     type: "v" | "f";
     dueDate: string | null;
+    displayName: string | null;
+    month: number;
   }) => Promise<void> | void;
 }
 
@@ -22,18 +29,22 @@ export default function NewPieceModal({
 }: NewPieceModalProps) {
   const [clientId, setClientId] = useState<string>("");
   const [type, setType] = useState<"v" | "f">("v");
+  const [displayName, setDisplayName] = useState<string>("");
   const [dueDate, setDueDate] = useState<string>("");
+  const [month, setMonth] = useState<number>(() => new Date().getMonth() + 1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
-      setClientId(clients[0]?.id ?? "");
+      setClientId("");
       setType("v");
+      setDisplayName("");
       setDueDate("");
+      setMonth(new Date().getMonth() + 1);
       setError(null);
     }
-  }, [isOpen, clients]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -46,7 +57,13 @@ export default function NewPieceModal({
     setSaving(true);
     setError(null);
     try {
-      await onCreate({ clientId, type, dueDate: dueDate || null });
+      await onCreate({
+        clientId,
+        type,
+        dueDate: dueDate || null,
+        displayName: displayName.trim() || null,
+        month,
+      });
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -76,7 +93,9 @@ export default function NewPieceModal({
               onChange={(e) => setClientId(e.target.value)}
               className="w-full rounded-md border border-line bg-panel2 px-3 py-2 text-sm text-text outline-none focus:border-brand2"
             >
-              {clients.length === 0 && <option value="">Sin clientes</option>}
+              <option value="" disabled>
+                {clients.length === 0 ? "Sin clientes" : "Selecciona un cliente"}
+              </option>
               {clients.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -111,6 +130,36 @@ export default function NewPieceModal({
                 📸 Foto
               </button>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-muted mb-1">
+              Mes al que pertenece
+            </label>
+            <select
+              value={month}
+              onChange={(e) => setMonth(Number(e.target.value))}
+              className="w-full rounded-md border border-line bg-panel2 px-3 py-2 text-sm text-text outline-none focus:border-brand2"
+            >
+              {MONTH_NAMES.map((name, i) => (
+                <option key={name} value={i + 1}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-muted mb-1">
+              Nombre (opcional)
+            </label>
+            <input
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="Sin nombre — se mostrará el código generado"
+              className="w-full rounded-md border border-line bg-panel2 px-3 py-2 text-sm text-text outline-none focus:border-brand2 placeholder:text-muted/60"
+            />
           </div>
 
           <div>
