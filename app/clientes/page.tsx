@@ -6,8 +6,9 @@ import { LuLink, LuCheck, LuExternalLink, LuBookOpen } from "react-icons/lu";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
 import type { Client, Profile } from "@/lib/types";
-import { fetchClients } from "@/lib/events";
+import { fetchClients, setClientColor } from "@/lib/events";
 import { PACKAGES } from "@/lib/packages";
+import { defaultClientColor } from "@/lib/clientColors";
 import { createClient } from "@/lib/supabase/client";
 
 function formatPrice(price?: number | null): string {
@@ -24,8 +25,19 @@ function packageLabel(pkg?: string | null): string {
   return PACKAGES[pkg as keyof typeof PACKAGES]?.label ?? pkg;
 }
 
-function ClientRow({ client, dimmed }: { client: Client; dimmed?: boolean }) {
+function ClientRow({
+  client,
+  fallbackColor,
+  dimmed,
+  onColorChange,
+}: {
+  client: Client;
+  fallbackColor: string;
+  dimmed?: boolean;
+  onColorChange: (clientId: string, color: string) => void;
+}) {
   const [copied, setCopied] = useState(false);
+  const [savingColor, setSavingColor] = useState(false);
   const publicUrl = client.public_token ? `${window.location.origin}/c/${client.public_token}` : null;
 
   const handleCopy = async () => {
@@ -39,9 +51,31 @@ function ClientRow({ client, dimmed }: { client: Client; dimmed?: boolean }) {
     }
   };
 
+  const handleColorChange = async (newColor: string) => {
+    setSavingColor(true);
+    try {
+      await setClientColor(client.id, newColor);
+      onColorChange(client.id, newColor);
+    } catch (err) {
+      console.error("Error al guardar el color del cliente:", err);
+    } finally {
+      setSavingColor(false);
+    }
+  };
+
   return (
     <tr className={`border-b border-line/60 last:border-0 ${dimmed ? "opacity-50" : ""}`}>
       <td className="px-4 py-3 font-medium text-text">{client.name}</td>
+      <td className="px-4 py-3">
+        <input
+          type="color"
+          value={client.color || fallbackColor}
+          disabled={savingColor}
+          onChange={(e) => handleColorChange(e.target.value)}
+          title="Color del cliente en Entregas"
+          className="h-6 w-9 cursor-pointer rounded border border-line bg-transparent p-0 disabled:opacity-50"
+        />
+      </td>
       <td className="px-4 py-3 text-muted">{formatPrice(client.price)}</td>
       <td className="px-4 py-3">
         <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-panel2 border border-line text-muted">
@@ -154,6 +188,17 @@ export default function ClientesPage() {
   const activeClients = clients.filter((c) => !c.paused);
   const pausedClients = clients.filter((c) => c.paused);
 
+  // Índice estable (orden de fetchClients, por nombre) para el color por defecto en
+  // el picker -- el mismo orden que usa Entregas para su paleta automática.
+  const fallbackColorFor = (clientId: string) => {
+    const i = clients.findIndex((c) => c.id === clientId);
+    return defaultClientColor(i === -1 ? 0 : i);
+  };
+
+  const handleColorChange = (clientId: string, color: string) => {
+    setClients((prev) => prev.map((c) => (c.id === clientId ? { ...c, color } : c)));
+  };
+
   if (loadingAuth || !currentUser) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-ink text-muted font-mono text-sm">
@@ -186,6 +231,7 @@ export default function ClientesPage() {
                   <thead>
                     <tr className="border-b border-line bg-panel2/40 text-left text-muted">
                       <th className="px-4 py-2.5 font-medium">Nombre</th>
+                      <th className="px-4 py-2.5 font-medium">Color</th>
                       <th className="px-4 py-2.5 font-medium">Precio</th>
                       <th className="px-4 py-2.5 font-medium">Paquete</th>
                       <th className="px-4 py-2.5 font-medium">Link a su calendario</th>
@@ -194,12 +240,17 @@ export default function ClientesPage() {
                   </thead>
                   <tbody>
                     {activeClients.map((client) => (
-                      <ClientRow key={client.id} client={client} />
+                      <ClientRow
+                        key={client.id}
+                        client={client}
+                        fallbackColor={fallbackColorFor(client.id)}
+                        onColorChange={handleColorChange}
+                      />
                     ))}
 
                     {activeClients.length === 0 && pausedClients.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="px-4 py-6 text-center text-muted italic">
+                        <td colSpan={6} className="px-4 py-6 text-center text-muted italic">
                           No hay clientes todavía.
                         </td>
                       </tr>
@@ -208,14 +259,20 @@ export default function ClientesPage() {
                     {pausedClients.length > 0 && (
                       <>
                         <tr>
-                          <td colSpan={5} className="px-4 py-2 bg-panel2/60 border-y border-line">
+                          <td colSpan={6} className="px-4 py-2 bg-panel2/60 border-y border-line">
                             <span className="text-[11px] font-bold uppercase text-muted">
                               Pausados ({pausedClients.length})
                             </span>
                           </td>
                         </tr>
                         {pausedClients.map((client) => (
-                          <ClientRow key={client.id} client={client} dimmed />
+                          <ClientRow
+                            key={client.id}
+                            client={client}
+                            fallbackColor={fallbackColorFor(client.id)}
+                            onColorChange={handleColorChange}
+                            dimmed
+                          />
                         ))}
                       </>
                     )}

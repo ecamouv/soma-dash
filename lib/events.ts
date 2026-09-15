@@ -166,7 +166,7 @@ export async function fetchClients(): Promise<Client[]> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("clients")
-    .select("id, name, package, price, paused, public_token")
+    .select("id, name, package, price, paused, public_token, color")
     .order("name", { ascending: true });
   if (error) throw error;
   return data as Client[];
@@ -180,6 +180,17 @@ export async function fetchClients(): Promise<Client[]> {
 export async function setClientPaused(clientId: string, paused: boolean): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase.from("clients").update({ paused }).eq("id", clientId);
+  if (error) throw error;
+}
+
+/**
+ * Asignar el color de identidad de un cliente (hex, ej. "#60a5fa"). Se guarda desde
+ * Clientes y por ahora solo se usa para pintar su franja/encabezado en Entregas.
+ * `null` regresa al cliente a la paleta automática por defecto.
+ */
+export async function setClientColor(clientId: string, color: string | null): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.from("clients").update({ color }).eq("id", clientId);
   if (error) throw error;
 }
 

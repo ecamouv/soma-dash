@@ -17,6 +17,7 @@ import {
   nextCodeNumbers,
   buildPieceCode,
 } from "@/lib/deliveries";
+import { defaultClientColor, hexToRgba } from "@/lib/clientColors";
 
 // Entregas cubre las etapas de producción, de "por_grabar" a "aprobado".
 // "publicado" se marca desde la página de Publicaciones y no vive aquí.
@@ -106,19 +107,9 @@ const PREV_STATUS: Partial<Record<PieceStatus, PieceStatus>> = {
   aprobado: "revision",
 };
 
-// Paleta rotativa para distinguir clientes -- se usa tanto para las tarjetas de
-// "Todas las piezas" (bg/text/border) como para la franja de color por cliente en
-// las tarjetas del kanban (dot, un tono sólido para esa franja delgada).
-const CLIENT_COLOR_PALETTE: { bg: string; text: string; border: string; dot: string }[] = [
-  { bg: "bg-blue-500/10", text: "text-blue-300", border: "border-blue-500/30", dot: "bg-blue-400" },
-  { bg: "bg-rose-500/10", text: "text-rose-300", border: "border-rose-500/30", dot: "bg-rose-400" },
-  { bg: "bg-violet-500/10", text: "text-violet-300", border: "border-violet-500/30", dot: "bg-violet-400" },
-  { bg: "bg-amber-500/10", text: "text-amber-300", border: "border-amber-500/30", dot: "bg-amber-400" },
-  { bg: "bg-teal-500/10", text: "text-teal-300", border: "border-teal-500/30", dot: "bg-teal-400" },
-  { bg: "bg-fuchsia-500/10", text: "text-fuchsia-300", border: "border-fuchsia-500/30", dot: "bg-fuchsia-400" },
-  { bg: "bg-orange-500/10", text: "text-orange-300", border: "border-orange-500/30", dot: "bg-orange-400" },
-  { bg: "bg-cyan-500/10", text: "text-cyan-300", border: "border-cyan-500/30", dot: "bg-cyan-400" },
-];
+// El color por cliente (franja del kanban y encabezado de "Todas las piezas") ahora
+// sale de client.color si se asignó a mano en Clientes, o de defaultClientColor()
+// como paleta automática de respaldo -- ver lib/clientColors.ts.
 
 const MONTH_NAMES = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -222,7 +213,7 @@ function ClientPieceTable({
   onSelectPiece,
 }: {
   group: { client: Client | undefined; pieces: ContentPiece[] };
-  color: { bg: string; text: string; border: string };
+  color: string;
   sort: { by: "code" | "due_date"; dir: "asc" | "desc" };
   onToggleSort: (by: "code" | "due_date") => void;
   onSelectPiece: (piece: ContentPiece) => void;
@@ -251,17 +242,23 @@ function ClientPieceTable({
   return (
     <div className="overflow-hidden rounded-2xl border border-white/15 bg-panel shadow-lg shadow-black/50">
       <div
-        className={`relative overflow-hidden border-b bg-gradient-to-br ${color.bg} via-white/[0.02] to-transparent px-4 py-3 ${color.border}`}
+        className="relative overflow-hidden border-b px-4 py-3"
+        style={{
+          borderColor: hexToRgba(color, 0.35),
+          background: `linear-gradient(to bottom right, ${hexToRgba(color, 0.16)}, rgba(255,255,255,0.02), transparent)`,
+        }}
       >
         <div className="flex items-center justify-between gap-2">
           <h3
-            className={`min-w-0 truncate font-display text-base font-extrabold uppercase tracking-tight [text-shadow:0_1px_4px_rgba(0,0,0,0.9)] ${color.text}`}
+            className="min-w-0 truncate font-display text-base font-extrabold uppercase tracking-tight [text-shadow:0_1px_4px_rgba(0,0,0,0.9)]"
+            style={{ color }}
           >
             {group.client?.name ?? "Sin cliente"}
           </h3>
           <div className="flex shrink-0 items-center gap-2">
             <span
-              className={`rounded-full border px-2 py-0.5 font-mono text-[10px] font-semibold ${color.border} ${color.text}`}
+              className="rounded-full border px-2 py-0.5 font-mono text-[10px] font-semibold"
+              style={{ borderColor: hexToRgba(color, 0.4), color }}
             >
               {group.pieces.length}
             </span>
@@ -522,23 +519,36 @@ export default function DeliveriesPage() {
     );
   }, [pieces, monthStartISO, monthEndISO]);
 
-  // Color por cliente para la franja del kanban -- se calcula sobre `clients` (orden
-  // alfabético estable) y no sobre piecesByClient, que ahora varía con el mes: si
-  // saliera de ahí, un cliente podría cambiar de color entre meses según quién más
-  // tenga piezas ese mes.
+  // Color por cliente para la franja del kanban y el encabezado de "Todas las
+  // piezas": el que se asignó a mano en Clientes (client.color) o si no, la paleta
+  // automática por índice. Se calcula sobre `clients` (orden alfabético estable) y
+  // no sobre piecesByClient, que ahora varía con el mes: si saliera de ahí, un
+  // cliente podría cambiar de color entre meses según quién más tenga piezas ese mes.
   const clientColorMap = useMemo(() => {
-    const map = new Map<string, (typeof CLIENT_COLOR_PALETTE)[number]>();
+    const map = new Map<string, string>();
     clients.forEach((c, i) => {
-      map.set(c.id, CLIENT_COLOR_PALETTE[i % CLIENT_COLOR_PALETTE.length]);
+      map.set(c.id, c.color || defaultClientColor(i));
     });
     return map;
   }, [clients]);
 
+  // Piezas por columna, ordenadas por fecha de entrega -- de más cercana a más
+  // distante, y las que no tienen fecha van al final. Se recalcula automáticamente
+  // cada vez que cambia una fecha (filteredPieces depende de `pieces`, que se
+  // actualiza en cuanto se guarda un cambio de fecha).
   const piecesByStatus = useMemo(() => {
     const map = new Map<PieceStatus, ContentPiece[]>();
     for (const col of STATUS_COLUMNS) map.set(col.status, []);
     for (const p of filteredPieces) {
       map.get(p.status)?.push(p);
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => {
+        if (!a.due_date && !b.due_date) return 0;
+        if (!a.due_date) return 1;
+        if (!b.due_date) return -1;
+        return a.due_date.localeCompare(b.due_date);
+      });
     }
     return map;
   }, [filteredPieces]);
@@ -802,8 +812,8 @@ export default function DeliveriesPage() {
                         const isMoving = movingId === piece.id;
                         const typeMeta = TYPE_META[piece.type];
                         const isAdvance = isAdvancePiece(piece);
-                        const clientColor =
-                          clientColorMap.get(piece.client_id ?? "sin-cliente") ?? CLIENT_COLOR_PALETTE[0];
+                        const clientColorHex =
+                          clientColorMap.get(piece.client_id ?? "sin-cliente") ?? defaultClientColor(0);
                         const isDragging = draggedPieceId === piece.id;
 
                         return (
@@ -833,7 +843,8 @@ export default function DeliveriesPage() {
                             }`}
                           >
                             <span
-                              className={`absolute inset-y-0 left-0 w-[3px] rounded-l-lg ${clientColor.dot}`}
+                              className="absolute inset-y-0 left-0 w-[3px] rounded-l-lg"
+                              style={{ backgroundColor: clientColorHex }}
                               title={piece.client?.name ?? "Sin cliente"}
                             />
 
@@ -937,7 +948,7 @@ export default function DeliveriesPage() {
                 {piecesByClient.map((group) => {
                   const key = group.client?.id ?? "sin-cliente";
                   const sort = getClientSort(key);
-                  const color = clientColorMap.get(key) ?? CLIENT_COLOR_PALETTE[0];
+                  const color = clientColorMap.get(key) ?? defaultClientColor(0);
 
                   return (
                     <ClientPieceTable

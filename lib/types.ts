@@ -37,6 +37,9 @@ export interface Client {
   paused?: boolean;
   // Token opaco para el link público de calendario (/c/[public_token]).
   public_token?: string;
+  // Color asignado a mano desde Clientes (hex, ej. "#60a5fa"). Si es null, la UI
+  // usa su paleta automática por defecto -- por ahora solo se usa en Entregas.
+  color?: string | null;
 }
 
 export interface ClientPayment {
