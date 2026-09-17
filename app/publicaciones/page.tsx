@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { LuX } from "react-icons/lu";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
 import ContentPieceModal from "@/components/ContentPieceModal";
@@ -177,14 +178,16 @@ export default function PublicacionesPage() {
     }
   };
 
+  // Reagendar (drag-and-drop a otro día) cambia exclusivamente la fecha de entrega --
+  // a diferencia del modal de edición, aquí no hay un selector de "mes al que
+  // pertenece" de por medio, así que el mes se recalcula automáticamente a partir
+  // de la nueva fecha en vez de conservar el mes anterior.
   const handleAssignDueDate = async (pieceId: string, dueDate: string | null) => {
     const piece = pieces.find((p) => p.id === pieceId);
-    return handleSavePiece(
-      pieceId,
-      dueDate,
-      piece?.display_name ?? null,
-      piece?.month ?? new Date().getMonth() + 1
-    );
+    const month = dueDate
+      ? Number(dueDate.slice(5, 7))
+      : piece?.month ?? new Date().getMonth() + 1;
+    return handleSavePiece(pieceId, dueDate, piece?.display_name ?? null, month);
   };
 
   const handleSavePiece = async (
@@ -251,9 +254,10 @@ export default function PublicacionesPage() {
               <span>{errorMsg}</span>
               <button
                 onClick={() => setErrorMsg(null)}
-                className="shrink-0 text-red-300 hover:text-red-100"
+                aria-label="Cerrar aviso"
+                className="shrink-0 rounded-md p-1 -m-1 text-red-300 hover:bg-red-500/10 hover:text-red-100"
               >
-                ✕
+                <LuX className="h-4 w-4" />
               </button>
             </div>
           )}
@@ -338,7 +342,7 @@ export default function PublicacionesPage() {
                         onDrop={(e) => handleDropOnDay(e, iso)}
                         className={[
                           "flex min-h-[104px] max-h-[160px] flex-col gap-1 overflow-y-auto border-b border-r border-line px-1.5 py-1.5 transition",
-                          inMonth ? "bg-transparent" : "bg-black/20",
+                          inMonth ? "bg-transparent" : "bg-ink/40",
                           isDragOver ? "bg-orange-500/10 ring-1 ring-inset ring-orange-500/50" : "",
                         ].join(" ")}
                       >
@@ -346,7 +350,7 @@ export default function PublicacionesPage() {
                           className={[
                             "mb-0.5 inline-flex h-5 w-5 items-center justify-center self-start rounded-full text-[11px]",
                             isToday
-                              ? "bg-brand text-white font-semibold"
+                              ? "bg-brand text-on-primary font-semibold"
                               : inMonth
                               ? "text-text"
                               : "text-muted/40",
@@ -388,7 +392,7 @@ export default function PublicacionesPage() {
                                   ? "bg-emerald-500/10 text-emerald-300 cursor-pointer"
                                   : isSelectable
                                   ? "bg-teal-500/10 text-teal-300 cursor-grab active:cursor-grabbing"
-                                  : "bg-white/[0.02] text-muted/30 cursor-grab active:cursor-grabbing"
+                                  : "bg-panel2/50 text-muted/30 cursor-grab active:cursor-grabbing"
                               }`}
                             >
                               {isSelectable && (

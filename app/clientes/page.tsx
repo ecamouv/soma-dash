@@ -64,7 +64,7 @@ function ClientRow({
   };
 
   return (
-    <tr className={`border-b border-line/60 last:border-0 ${dimmed ? "opacity-50" : ""}`}>
+    <tr className={`border-b border-line/60 last:border-0 transition hover:bg-panel2/40 ${dimmed ? "opacity-50" : ""}`}>
       <td className="px-4 py-3 font-medium text-text">{client.name}</td>
       <td className="px-4 py-3">
         <input
@@ -230,12 +230,12 @@ export default function ClientesPage() {
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-line bg-panel2/40 text-left text-muted">
-                      <th className="px-4 py-2.5 font-medium">Nombre</th>
-                      <th className="px-4 py-2.5 font-medium">Color</th>
-                      <th className="px-4 py-2.5 font-medium">Precio</th>
-                      <th className="px-4 py-2.5 font-medium">Paquete</th>
-                      <th className="px-4 py-2.5 font-medium">Link a su calendario</th>
-                      <th className="px-4 py-2.5 font-medium">Biblioteca</th>
+                      <th className="px-4 py-2.5 text-eyebrow">Nombre</th>
+                      <th className="px-4 py-2.5 text-eyebrow">Color</th>
+                      <th className="px-4 py-2.5 text-eyebrow">Precio</th>
+                      <th className="px-4 py-2.5 text-eyebrow">Paquete</th>
+                      <th className="px-4 py-2.5 text-eyebrow">Link a su calendario</th>
+                      <th className="px-4 py-2.5 text-eyebrow">Biblioteca</th>
                     </tr>
                   </thead>
                   <tbody>

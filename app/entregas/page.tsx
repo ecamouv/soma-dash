@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { LuChevronUp, LuChevronDown, LuChevronsUpDown, LuChevronRight, LuVideo, LuCamera, LuMaximize2, LuMinimize2 } from "react-icons/lu";
+import { LuChevronUp, LuChevronDown, LuChevronsUpDown, LuChevronRight, LuVideo, LuCamera, LuMaximize2, LuMinimize2, LuX } from "react-icons/lu";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
 import ContentPieceModal from "@/components/ContentPieceModal";
@@ -82,15 +82,11 @@ const ALL_STATUS_META: Record<
   },
 };
 
-// Identidad de tipo de pieza -- solo se usa para el badge (ícono + texto) dentro de
-// la tarjeta. El color de la tarjeta (borde) lo da el status/columna (col.border),
-// no el tipo -- ver STATUS_COLUMNS.
-const TYPE_META: Record<
-  "v" | "f",
-  { label: string; Icon: typeof LuVideo; bg: string; text: string; border: string }
-> = {
-  v: { label: "Video", Icon: LuVideo, bg: "bg-red-900/40", text: "text-red-300", border: "border-red-700/40" },
-  f: { label: "Foto", Icon: LuCamera, bg: "bg-orange-900/40", text: "text-orange-300", border: "border-orange-500/40" },
+// Identidad de tipo de pieza -- monocromática a propósito (ícono + texto gris, sin
+// fondo de color): el único color que vive en la tarjeta es el dot de cliente.
+const TYPE_META: Record<"v" | "f", { label: string; Icon: typeof LuVideo }> = {
+  v: { label: "Video", Icon: LuVideo },
+  f: { label: "Foto", Icon: LuCamera },
 };
 
 // Transición manual hacia adelante permitida por columna (null = sin acción manual).
@@ -159,6 +155,44 @@ function isAdvancePiece(piece: ContentPiece): boolean {
   if (!eventMonth || eventMonth === piece.month) return false;
   if (piece.month === 1 && eventMonth === 12) return true;
   return eventMonth < piece.month;
+}
+
+// Tag compacto de 2-3 letras para identificar cliente en la tarjeta sin repetir el
+// nombre completo: iniciales de hasta 3 palabras, o las primeras 3 letras si es una
+// sola palabra ("Filmalo" -> "FIL", "Tres Leches" -> "TL").
+function clientInitials(name: string | undefined): string {
+  if (!name) return "—";
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length >= 2) {
+    return words.slice(0, 3).map((w) => w[0]).join("").toUpperCase();
+  }
+  return name.trim().slice(0, 3).toUpperCase();
+}
+
+interface ClientGroup {
+  key: string;
+  client: Client | undefined;
+  pieces: ContentPiece[];
+}
+
+// Agrupa una lista ya ordenada (por due_date) en sub-grupos por cliente, preservando
+// ese orden dentro de cada grupo. Los grupos se ordenan por la fecha más próxima que
+// tengan (su primera pieza, ya que cada grupo hereda el orden de la lista original).
+function groupPiecesByClient(pieces: ContentPiece[]): ClientGroup[] {
+  const map = new Map<string, ClientGroup>();
+  for (const p of pieces) {
+    const key = p.client_id ?? "sin-cliente";
+    if (!map.has(key)) map.set(key, { key, client: p.client, pieces: [] });
+    map.get(key)!.pieces.push(p);
+  }
+  return [...map.values()].sort((a, b) => {
+    const aDate = a.pieces[0]?.due_date;
+    const bDate = b.pieces[0]?.due_date;
+    if (!aDate && !bDate) return 0;
+    if (!aDate) return 1;
+    if (!bDate) return -1;
+    return aDate.localeCompare(bDate);
+  });
 }
 
 function comparePieces(
@@ -240,7 +274,7 @@ function ClientPieceTable({
   }, [sortedPieces, expanded]);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/15 bg-panel shadow-lg shadow-black/50">
+    <div className="overflow-hidden rounded-2xl border border-line bg-panel shadow-elevated">
       <div
         className="relative overflow-hidden border-b px-4 py-3"
         style={{
@@ -250,7 +284,7 @@ function ClientPieceTable({
       >
         <div className="flex items-center justify-between gap-2">
           <h3
-            className="min-w-0 truncate font-display text-base font-extrabold uppercase tracking-tight [text-shadow:0_1px_4px_rgba(0,0,0,0.9)]"
+            className="min-w-0 truncate font-display text-base font-extrabold uppercase tracking-tight"
             style={{ color }}
           >
             {group.client?.name ?? "Sin cliente"}
@@ -266,7 +300,7 @@ function ClientPieceTable({
               type="button"
               onClick={() => setExpanded((v) => !v)}
               title={expanded ? "Contraer" : "Expandir para ver todas sin scroll"}
-              className="rounded-md border border-white/20 p-1 text-white/60 transition hover:border-white/50 hover:text-white"
+              className="rounded-md border border-line p-1 text-muted transition hover:border-line/80 hover:text-text"
             >
               {expanded ? (
                 <LuMinimize2 className="h-3 w-3" />
@@ -286,11 +320,11 @@ function ClientPieceTable({
         >
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-white/10 bg-white/[0.03] text-left text-white/50">
+              <tr className="border-b border-line/60 bg-panel2/50 text-left text-muted">
                 <th className="px-4 py-2.5 font-semibold uppercase tracking-wider text-[10px]">
                   <button
                     onClick={() => onToggleSort("code")}
-                    className="flex items-center gap-1 hover:text-white"
+                    className="flex items-center gap-1 hover:text-text"
                   >
                     Pieza <SortIcon sort={sort} column="code" />
                   </button>
@@ -299,7 +333,7 @@ function ClientPieceTable({
                 <th className="px-4 py-2.5 font-semibold uppercase tracking-wider text-[10px]">
                   <button
                     onClick={() => onToggleSort("due_date")}
-                    className="flex items-center gap-1 hover:text-white"
+                    className="flex items-center gap-1 hover:text-text"
                   >
                     Entrega <SortIcon sort={sort} column="due_date" />
                   </button>
@@ -311,14 +345,14 @@ function ClientPieceTable({
               {sortedPieces.map((piece) => {
                 const meta = ALL_STATUS_META[piece.status] ?? {
                   label: piece.status,
-                  bg: "bg-zinc-500/10",
-                  text: "text-zinc-400",
+                  bg: "bg-panel2",
+                  text: "text-muted",
                 };
                 return (
                   <tr
                     key={piece.id}
                     onClick={() => onSelectPiece(piece)}
-                    className="border-b border-line/60 last:border-0 cursor-pointer hover:bg-white/[0.04]"
+                    className="border-b border-line/60 last:border-0 cursor-pointer hover:bg-panel2/40"
                   >
                     <td className="px-4 py-2 font-mono font-semibold text-text">{pieceLabel(piece)}</td>
                     <td className="px-4 py-2 text-muted">{piece.type === "v" ? "Video" : "Foto"}</td>
@@ -337,7 +371,7 @@ function ClientPieceTable({
           </table>
         </div>
         {!expanded && showFade && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/90 via-black/50 to-transparent" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-panel via-panel/70 to-transparent" />
         )}
       </div>
     </div>
@@ -360,6 +394,9 @@ export default function DeliveriesPage() {
   const [selectedPiece, setSelectedPiece] = useState<ContentPiece | null>(null);
   const [isNewPieceOpen, setIsNewPieceOpen] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // Vista activa: kanban o tabla por cliente -- nunca las dos a la vez (eran la misma
+  // información duplicada). Persistida para no resetearse al volver a la página.
+  const [view, setView] = useState<"kanban" | "cliente">("kanban");
   // Colapso de "Sin fecha de grabación", persistido para que no se resetee al volver.
   const [unscheduledCollapsed, setUnscheduledCollapsed] = useState(false);
   // Arrastrar-y-soltar entre columnas del kanban: solo permite el mismo salto de un
@@ -411,15 +448,26 @@ export default function DeliveriesPage() {
     router.refresh();
   };
 
-  // Persistir el colapso de "Sin fecha de grabación" en localStorage.
+  // Persistir la vista activa y el colapso de "Sin fecha de grabación" en localStorage.
   useEffect(() => {
     try {
+      const storedView = localStorage.getItem("entregas:view");
+      if (storedView === "kanban" || storedView === "cliente") setView(storedView);
       const stored = localStorage.getItem("entregas:unscheduledCollapsed");
       if (stored !== null) setUnscheduledCollapsed(stored === "1");
     } catch {
       // localStorage no disponible (SSR, navegación privada, etc.) -- se ignora.
     }
   }, []);
+
+  const changeView = (next: "kanban" | "cliente") => {
+    setView(next);
+    try {
+      localStorage.setItem("entregas:view", next);
+    } catch {
+      // localStorage no disponible -- el estado en memoria sigue funcionando igual.
+    }
+  };
 
   const toggleUnscheduledCollapsed = () => {
     setUnscheduledCollapsed((prev) => {
@@ -504,7 +552,7 @@ export default function DeliveriesPage() {
   // ningún mes, así que no aparece aquí (se queda en "Sin fecha de grabación").
   // El orden de cada tabla se aplica al renderizar (ver clientSort/toggleClientSort).
   const piecesByClient = useMemo(() => {
-    const inMonth = pieces.filter((p) => {
+    const inMonth = clientFilteredPieces.filter((p) => {
       const date = pieceDate(p);
       return !!date && date >= monthStartISO && date <= monthEndISO;
     });
@@ -517,7 +565,7 @@ export default function DeliveriesPage() {
     return [...groups.values()].sort((a, b) =>
       (a.client?.name ?? "").localeCompare(b.client?.name ?? "")
     );
-  }, [pieces, monthStartISO, monthEndISO]);
+  }, [clientFilteredPieces, monthStartISO, monthEndISO]);
 
   // Color por cliente para la franja del kanban y el encabezado de "Todas las
   // piezas": el que se asignó a mano en Clientes (client.color) o si no, la paleta
@@ -658,9 +706,40 @@ export default function DeliveriesPage() {
 
         <div className="p-6 space-y-6">
           {/* Header */}
-          <div>
-            <span className="text-xs text-muted">Operación › Entregas</span>
-            <h1 className="text-2xl font-bold font-display bg-gradient-to-r from-text to-muted bg-clip-text text-transparent">Entregas</h1>
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <span className="text-xs text-muted">Operación › Entregas</span>
+              <h1 className="text-2xl font-bold font-display bg-gradient-to-r from-text to-muted bg-clip-text text-transparent">Entregas</h1>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="flex items-center rounded-lg border border-line bg-panel p-0.5">
+                <button
+                  type="button"
+                  onClick={() => changeView("kanban")}
+                  className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                    view === "kanban" ? "bg-panel2 text-text shadow-sm" : "text-muted hover:text-text"
+                  }`}
+                >
+                  Kanban
+                </button>
+                <button
+                  type="button"
+                  onClick={() => changeView("cliente")}
+                  className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                    view === "cliente" ? "bg-panel2 text-text shadow-sm" : "text-muted hover:text-text"
+                  }`}
+                >
+                  Por cliente
+                </button>
+              </div>
+              <button
+                onClick={() => setIsNewPieceOpen(true)}
+                className="px-3 py-1.5 text-xs font-semibold text-on-primary bg-gradient-to-r from-brand to-brand2 hover:brightness-110 rounded-md shadow"
+              >
+                + Nueva pieza
+              </button>
+            </div>
           </div>
 
           {errorMsg && (
@@ -668,9 +747,10 @@ export default function DeliveriesPage() {
               <span>{errorMsg}</span>
               <button
                 onClick={() => setErrorMsg(null)}
-                className="shrink-0 text-red-300 hover:text-red-100"
+                aria-label="Cerrar aviso"
+                className="shrink-0 rounded-md p-1 -m-1 text-red-300 hover:bg-red-500/10 hover:text-red-100"
               >
-                ✕
+                <LuX className="h-4 w-4" />
               </button>
             </div>
           )}
@@ -752,218 +832,230 @@ export default function DeliveriesPage() {
           )}
 
           {/* Kanban - vista de piezas en Entregas */}
-          {loading ? (
-            <div className="text-xs text-muted p-4">Cargando piezas...</div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-              {STATUS_COLUMNS.map((col) => {
-                const colPieces = piecesByStatus.get(col.status) ?? [];
-                const draggedPiece = pieces.find((p) => p.id === draggedPieceId);
-                const isValidDrop = isValidDropTarget(draggedPiece, col.status);
-                const isDragOver = dragOverStatus === col.status;
+          {view === "kanban" && (
+            loading ? (
+              <div className="text-xs text-muted p-4">Cargando piezas...</div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                {STATUS_COLUMNS.map((col) => {
+                  const colPieces = piecesByStatus.get(col.status) ?? [];
+                  const draggedPiece = pieces.find((p) => p.id === draggedPieceId);
+                  const isValidDrop = isValidDropTarget(draggedPiece, col.status);
+                  const isDragOver = dragOverStatus === col.status;
+                  // Agrupar por cliente solo tiene sentido viendo "todos los clientes" --
+                  // si ya se filtró a uno, el mini-header sería redundante con el filtro.
+                  const groups: ClientGroup[] =
+                    selectedClientId === "all"
+                      ? groupPiecesByClient(colPieces)
+                      : [{ key: selectedClientId, client: colPieces[0]?.client, pieces: colPieces }];
 
-                return (
-                  <div
-                    key={col.status}
-                    onDragOver={(e) => {
-                      if (!isValidDrop) return;
-                      e.preventDefault();
-                      if (dragOverStatus !== col.status) setDragOverStatus(col.status);
-                    }}
-                    onDragLeave={() =>
-                      setDragOverStatus((s) => (s === col.status ? null : s))
-                    }
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      const pieceId = e.dataTransfer.getData("text/plain");
-                      const piece = pieces.find((p) => p.id === pieceId);
-                      if (piece && isValidDropTarget(piece, col.status)) {
-                        handleMove(piece, col.status);
+                  return (
+                    <div
+                      key={col.status}
+                      onDragOver={(e) => {
+                        if (!isValidDrop) return;
+                        e.preventDefault();
+                        if (dragOverStatus !== col.status) setDragOverStatus(col.status);
+                      }}
+                      onDragLeave={() =>
+                        setDragOverStatus((s) => (s === col.status ? null : s))
                       }
-                      setDraggedPieceId(null);
-                      setDragOverStatus(null);
-                    }}
-                    className={`min-w-0 rounded-2xl border bg-panel min-h-[240px] p-2 space-y-1.5 shadow-sm transition ${
-                      isDragOver ? "border-brand2/60 ring-1 ring-inset ring-brand2/40 bg-brand2/5" : "border-line"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between px-1">
-                      <div className="flex items-center gap-2">
-                        <span className={`h-2 w-2 rounded-full ${col.dot}`} />
-                        <h2 className="text-sm font-bold text-text">{col.label}</h2>
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const pieceId = e.dataTransfer.getData("text/plain");
+                        const piece = pieces.find((p) => p.id === pieceId);
+                        if (piece && isValidDropTarget(piece, col.status)) {
+                          handleMove(piece, col.status);
+                        }
+                        setDraggedPieceId(null);
+                        setDragOverStatus(null);
+                      }}
+                      className={`min-w-0 rounded-2xl border bg-panel min-h-[240px] p-2 space-y-2 shadow-sm transition ${
+                        isDragOver ? "border-brand2/60 ring-1 ring-inset ring-brand2/40 bg-brand2/5" : "border-line"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between px-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`h-2 w-2 rounded-full ${col.dot}`} />
+                          <h2 className="text-sm font-bold text-text">{col.label}</h2>
+                        </div>
+                        <span className="text-[11px] font-mono text-text">
+                          {selectedClientId !== "all"
+                            ? `${colPieces.length}/${filteredPieces.length}`
+                            : colPieces.length}
+                        </span>
                       </div>
-                      <span className="text-[11px] font-mono text-text">
-                        {selectedClientId !== "all"
-                          ? `${colPieces.length}/${filteredPieces.length}`
-                          : colPieces.length}
-                      </span>
-                    </div>
 
-                    <div className="space-y-1">
                       {colPieces.length === 0 && (
                         <div className="text-[11px] text-muted italic px-2 py-3 text-center">
                           Sin piezas este mes
                         </div>
                       )}
 
-                      {colPieces.map((piece) => {
-                        const nextStatus = NEXT_STATUS[piece.status];
-                        const prevStatus = PREV_STATUS[piece.status];
-                        const isMoving = movingId === piece.id;
-                        const typeMeta = TYPE_META[piece.type];
-                        const isAdvance = isAdvancePiece(piece);
-                        const clientColorHex =
-                          clientColorMap.get(piece.client_id ?? "sin-cliente") ?? defaultClientColor(0);
-                        const isDragging = draggedPieceId === piece.id;
-
-                        return (
-                          <div
-                            key={piece.id}
-                            role="button"
-                            tabIndex={0}
-                            draggable
-                            onDragStart={(e) => {
-                              setDraggedPieceId(piece.id);
-                              e.dataTransfer.setData("text/plain", piece.id);
-                              e.dataTransfer.effectAllowed = "move";
-                            }}
-                            onDragEnd={() => {
-                              setDraggedPieceId(null);
-                              setDragOverStatus(null);
-                            }}
-                            onClick={() => setSelectedPiece(piece)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" || e.key === " ") {
-                                e.preventDefault();
-                                setSelectedPiece(piece);
-                              }
-                            }}
-                            className={`group relative min-w-0 w-full overflow-hidden rounded-lg border bg-panel2 p-1.5 pl-2.5 space-y-1 shadow-sm cursor-grab active:cursor-grabbing hover:border-brand2/60 transition ${col.border} ${
-                              isDragging ? "opacity-40" : ""
-                            }`}
-                          >
-                            <span
-                              className="absolute inset-y-0 left-0 w-[3px] rounded-l-lg"
-                              style={{ backgroundColor: clientColorHex }}
-                              title={piece.client?.name ?? "Sin cliente"}
-                            />
-
-                            <div className="flex items-center justify-between gap-1.5">
-                              <div className="flex min-w-0 items-center gap-1 flex-wrap">
-                                <span
-                                  className={`inline-flex shrink-0 items-center gap-1 rounded-full border ${typeMeta.border} ${typeMeta.bg} ${typeMeta.text} px-1.5 py-[3px] text-[8px] font-bold uppercase tracking-wide`}
-                                >
-                                  <typeMeta.Icon className="h-2.5 w-2.5" strokeWidth={2.5} />
-                                  {typeMeta.label}
-                                </span>
-                                {isAdvance && (
-                                  <span
-                                    className="shrink-0 rounded-full border border-green-500/40 bg-green-500/10 px-1.5 py-[3px] text-[8px] font-bold uppercase tracking-wide text-green-400"
-                                    title={`Grabada antes de tiempo -- pertenece al mes ${piece.month}`}
-                                  >
-                                    Adelantado
-                                  </span>
-                                )}
-                              </div>
+                      {groups.map((g) => (
+                        <div key={g.key}>
+                          {selectedClientId === "all" && (
+                            <div className="sticky top-0 z-10 -mx-2 mb-1 flex items-center gap-1.5 bg-panel/95 px-2 py-1 backdrop-blur-sm">
                               <span
-                                className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded ${col.bg} ${col.text}`}
-                                title={piece.due_date ? "Fecha de entrega" : "Sin fecha de entrega asignada"}
-                              >
-                                {piece.due_date ? formatDay(piece.due_date) : "Sin fecha"}
+                                className="h-1.5 w-1.5 shrink-0 rounded-full"
+                                style={{
+                                  backgroundColor: clientColorMap.get(g.key) ?? defaultClientColor(0),
+                                }}
+                              />
+                              <span className="truncate text-[10px] font-semibold uppercase tracking-wide text-muted">
+                                {g.client?.name ?? "Sin cliente"}
                               </span>
+                              <span className="text-[9px] text-muted/50">({g.pieces.length})</span>
                             </div>
+                          )}
 
-                            <div className="flex items-baseline justify-between gap-1.5">
-                              <span className="min-w-0 flex-1 truncate font-mono text-[11px] font-semibold text-text">
-                                {pieceLabel(piece)}
-                              </span>
-                              <span className="shrink-0 max-w-[40%] truncate text-[9px] text-muted">
-                                {piece.client?.name ?? "Sin cliente"}
-                              </span>
-                            </div>
+                          <div className="space-y-1">
+                            {g.pieces.map((piece) => {
+                              const nextStatus = NEXT_STATUS[piece.status];
+                              const prevStatus = PREV_STATUS[piece.status];
+                              const isMoving = movingId === piece.id;
+                              const typeMeta = TYPE_META[piece.type];
+                              const isAdvance = isAdvancePiece(piece);
+                              const clientColorHex =
+                                clientColorMap.get(piece.client_id ?? "sin-cliente") ?? defaultClientColor(0);
+                              const isDragging = draggedPieceId === piece.id;
 
-                            {(prevStatus || nextStatus) && (
-                              <div
-                                className="flex items-center justify-between overflow-hidden max-h-0 opacity-0 mt-0 pt-0 border-t border-transparent group-hover:max-h-6 group-hover:opacity-100 group-hover:mt-1 group-hover:pt-1 group-hover:border-line/60 group-focus-within:max-h-6 group-focus-within:opacity-100 group-focus-within:mt-1 group-focus-within:pt-1 group-focus-within:border-line/60 transition-all duration-150"
-                              >
-                                {prevStatus ? (
-                                  <button
-                                    disabled={isMoving}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleMove(piece, prevStatus);
-                                    }}
-                                    className="truncate text-[9px] font-medium text-muted hover:text-text disabled:opacity-40"
-                                  >
-                                    ← {STATUS_COLUMNS.find((c) => c.status === prevStatus)?.label}
-                                  </button>
-                                ) : (
-                                  <span />
-                                )}
-                                {nextStatus && (
-                                  <button
-                                    disabled={isMoving}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleMove(piece, nextStatus);
-                                    }}
-                                    className="truncate text-[9px] font-semibold text-brand2 hover:underline disabled:opacity-40"
-                                  >
-                                    {STATUS_COLUMNS.find((c) => c.status === nextStatus)?.label} →
-                                  </button>
-                                )}
-                              </div>
-                            )}
+                              return (
+                                <div
+                                  key={piece.id}
+                                  role="button"
+                                  tabIndex={0}
+                                  draggable
+                                  onDragStart={(e) => {
+                                    setDraggedPieceId(piece.id);
+                                    e.dataTransfer.setData("text/plain", piece.id);
+                                    e.dataTransfer.effectAllowed = "move";
+                                  }}
+                                  onDragEnd={() => {
+                                    setDraggedPieceId(null);
+                                    setDragOverStatus(null);
+                                  }}
+                                  onClick={() => setSelectedPiece(piece)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" || e.key === " ") {
+                                      e.preventDefault();
+                                      setSelectedPiece(piece);
+                                    }
+                                  }}
+                                  className={`group relative min-w-0 w-full overflow-hidden rounded-lg border border-line bg-panel2 p-2 space-y-1 shadow-sm cursor-grab active:cursor-grabbing hover:border-brand2/50 transition ${
+                                    isDragging ? "opacity-40" : ""
+                                  }`}
+                                >
+                                  <div className="flex items-start justify-between gap-2">
+                                    <span className="min-w-0 flex-1 truncate font-display text-sm font-bold text-text">
+                                      {pieceLabel(piece)}
+                                    </span>
+                                    <span
+                                      className="shrink-0 text-[10px] font-medium text-muted"
+                                      title={piece.due_date ? "Fecha de entrega" : "Sin fecha de entrega asignada"}
+                                    >
+                                      {piece.due_date ? formatDay(piece.due_date) : "Sin fecha"}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[9px] text-muted/70">
+                                    {selectedClientId === "all" && (
+                                      <span className="inline-flex items-center gap-1" title={piece.client?.name}>
+                                        <span
+                                          className="h-1.5 w-1.5 shrink-0 rounded-full"
+                                          style={{ backgroundColor: clientColorHex }}
+                                        />
+                                        {clientInitials(piece.client?.name)}
+                                      </span>
+                                    )}
+                                    <span className="inline-flex items-center gap-1">
+                                      <typeMeta.Icon className="h-2.5 w-2.5" strokeWidth={2} />
+                                      {typeMeta.label}
+                                    </span>
+                                    {isAdvance && (
+                                      <span title={`Grabada antes de tiempo -- pertenece al mes ${piece.month}`}>
+                                        Adelantado
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {(prevStatus || nextStatus) && (
+                                    <div className="flex items-center justify-between overflow-hidden max-h-0 opacity-0 mt-0 pt-0 border-t border-transparent group-hover:max-h-6 group-hover:opacity-100 group-hover:mt-1 group-hover:pt-1 group-hover:border-line/60 group-focus-within:max-h-6 group-focus-within:opacity-100 group-focus-within:mt-1 group-focus-within:pt-1 group-focus-within:border-line/60 transition-all duration-150">
+                                      {prevStatus ? (
+                                        <button
+                                          disabled={isMoving}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleMove(piece, prevStatus);
+                                          }}
+                                          className="truncate text-[9px] font-medium text-muted hover:text-text disabled:opacity-40"
+                                        >
+                                          ← {STATUS_COLUMNS.find((c) => c.status === prevStatus)?.label}
+                                        </button>
+                                      ) : (
+                                        <span />
+                                      )}
+                                      {nextStatus && (
+                                        <button
+                                          disabled={isMoving}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleMove(piece, nextStatus);
+                                          }}
+                                          className="truncate text-[9px] font-semibold text-brand2 hover:underline disabled:opacity-40"
+                                        >
+                                          {STATUS_COLUMNS.find((c) => c.status === nextStatus)?.label} →
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
-                        );
-                      })}
+                        </div>
+                      ))}
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )
           )}
 
           {/* Tabla maestra por cliente */}
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+          {view === "cliente" && (
+            <div className="space-y-3">
               <div className="flex items-baseline gap-2">
                 <h2 className="text-lg font-bold font-display text-text">Todas las piezas</h2>
                 <span className="text-xs text-muted">
                   {MONTH_NAMES[month.getMonth()]} {month.getFullYear()}
                 </span>
               </div>
-              <button
-                onClick={() => setIsNewPieceOpen(true)}
-                className="px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-brand to-brand2 hover:brightness-110 rounded-md shadow"
-              >
-                + Nueva pieza
-              </button>
+
+              {loading ? (
+                <div className="text-xs text-muted p-4">Cargando piezas...</div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
+                  {piecesByClient.map((group) => {
+                    const key = group.client?.id ?? "sin-cliente";
+                    const sort = getClientSort(key);
+                    const color = clientColorMap.get(key) ?? defaultClientColor(0);
+
+                    return (
+                      <ClientPieceTable
+                        key={key}
+                        group={group}
+                        color={color}
+                        sort={sort}
+                        onToggleSort={(by) => toggleClientSort(key, by)}
+                        onSelectPiece={setSelectedPiece}
+                      />
+                    );
+                  })}
+                </div>
+              )}
             </div>
-
-            {loading ? (
-              <div className="text-xs text-muted p-4">Cargando piezas...</div>
-            ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
-                {piecesByClient.map((group) => {
-                  const key = group.client?.id ?? "sin-cliente";
-                  const sort = getClientSort(key);
-                  const color = clientColorMap.get(key) ?? defaultClientColor(0);
-
-                  return (
-                    <ClientPieceTable
-                      key={key}
-                      group={group}
-                      color={color}
-                      sort={sort}
-                      onToggleSort={(by) => toggleClientSort(key, by)}
-                      onSelectPiece={setSelectedPiece}
-                    />
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          )}
         </div>
       </div>
 

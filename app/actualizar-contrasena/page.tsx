@@ -113,7 +113,7 @@ export default function ActualizarContrasenaPage() {
             <button
               type="button"
               onClick={() => router.push("/login")}
-              className="w-full rounded-xl bg-gradient-to-r from-brand to-brand2 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:brightness-110"
+              className="w-full rounded-xl bg-gradient-to-r from-brand to-brand2 py-2.5 text-sm font-semibold text-on-primary shadow-lg transition hover:brightness-110"
             >
               Ir a iniciar sesión
             </button>

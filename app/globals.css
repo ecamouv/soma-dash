@@ -2,13 +2,159 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * SOMA design tokens — sistema oscuro con acabado editorial.
+ * Única fuente de verdad: todo color, tipografía, radio, spacing y sombra
+ * que use el dashboard debe leer de aquí (directo o vía tailwind.config.ts).
+ */
 :root {
   color-scheme: dark;
+
+  /* ---- Color: marca / acento estructural (rojo SOMA original) ---- */
+  --color-primary: #e11d48;
+  --color-primary-rgb: 225 29 72;
+  --color-primary-active: #f43f5e;
+  --color-primary-active-rgb: 244 63 94;
+  --color-primary-soft: #fb7185;
+  --color-primary-soft-rgb: 251 113 133;
+  --color-secondary: #818cf8; /* índigo vibrante con personalidad editorial */
+  --color-on-primary: #ffffff;
+
+  /* ---- Color: superficie ---- */
+  --color-canvas: #0b0c0e; /* azabache profundo */
+  --color-canvas-rgb: 11 12 14;
+  --color-canvas-soft: #121417;
+  --color-canvas-soft-rgb: 18 20 23;
+  --color-surface: #17191d;
+  --color-surface-rgb: 23 25 29;
+  --color-surface-soft: #20232a; /* hover/inputs */
+  --color-surface-soft-rgb: 32 35 42;
+
+  /* ---- Color: texto ---- */
+  --color-ink: #f4f4f5; /* blanco marfil de alto contraste */
+  --color-ink-rgb: 244 244 245;
+  --color-ink-secondary: #d4d4d8;
+  --color-ink-secondary-rgb: 212 212 216;
+  --color-ink-muted: #91919a;
+  --color-ink-muted-rgb: 145 145 154;
+  --color-ink-faint: #52525b;
+  --color-ink-faint-rgb: 82 82 91;
+
+  /* ---- Color: línea ---- */
+  --color-hairline: #27272a;
+  --color-hairline-rgb: 39 39 42;
+
+  /* ---- Color: acentos decorativos (luminosidad ajustada para fondo oscuro) ---- */
+  --color-accent-sky: #38bdf8;
+  --color-accent-purple: #c084fc;
+  --color-accent-purple-deep: #2e1065;
+  --color-accent-pink: #f472b6;
+  --color-accent-orange: #fb923c;
+  --color-accent-orange-deep: #451a03;
+  --color-accent-teal: #2dd4bf;
+  --color-accent-green: #4ade80;
+  --color-accent-brown: #78350f;
+
+  /* ---- Color: complementarios neutros cálidos (tags, dots, chrome secundario) ---- */
+  --color-accent-white: #ffffff;
+  --color-accent-bone: #e3dac9;
+  --color-accent-ivory: #fffff0;
+  --color-accent-nude: #e3bc9a;
+  --color-accent-beige: #ede6d8;
+
+  /* ---- Tipografía ---- */
+  --font-family-base: var(--font-inter), Inter, -apple-system, system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
+
+  --text-display-1-size: 64px;
+  --text-display-1-weight: 700;
+  --text-display-1-leading: 1;
+  --text-display-1-tracking: -2.125px;
+
+  --text-display-2-size: 54px;
+  --text-display-2-weight: 700;
+  --text-display-2-leading: 1.04;
+  --text-display-2-tracking: -1.875px;
+
+  --text-heading-1-size: 40px;
+  --text-heading-1-weight: 700;
+  --text-heading-1-leading: 1.1;
+  --text-heading-1-tracking: -1px;
+
+  --text-heading-2-size: 26px;
+  --text-heading-2-weight: 700;
+  --text-heading-2-leading: 1.23;
+  --text-heading-2-tracking: -0.625px;
+
+  --text-heading-3-size: 22px;
+  --text-heading-3-weight: 700;
+  --text-heading-3-leading: 1.27;
+  --text-heading-3-tracking: -0.25px;
+
+  --text-title-size: 20px;
+  --text-title-weight: 600;
+  --text-title-leading: 1.4;
+  --text-title-tracking: -0.125px;
+
+  --text-body-md-size: 16px;
+  --text-body-md-weight: 400;
+  --text-body-md-leading: 1.5;
+  --text-body-md-tracking: 0px;
+
+  --text-body-sm-size: 15px;
+  --text-body-sm-weight: 400;
+  --text-body-sm-leading: 1.33;
+  --text-body-sm-tracking: 0px;
+
+  --text-button-size: 16px;
+  --text-button-weight: 500;
+  --text-button-leading: 1.5;
+  --text-button-tracking: 0px;
+
+  --text-caption-size: 14px;
+  --text-caption-weight: 400;
+  --text-caption-leading: 1.43;
+  --text-caption-tracking: 0px;
+
+  --text-eyebrow-size: 12px;
+  --text-eyebrow-weight: 600;
+  --text-eyebrow-leading: 1.33;
+  --text-eyebrow-tracking: 0.125px;
+
+  /* ---- Radios ---- */
+  --radius-xs: 4px;
+  --radius-sm: 5px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* ---- Spacing (base 8px) ---- */
+  --spacing-xxs: 4px;
+  --spacing-xs: 8px;
+  --spacing-sm: 12px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 28px;
+  --spacing-xxl: 32px;
+
+  /* ---- Elevación: oclusión ambiental sutil e iluminación especular tenue ---- */
+  --shadow-flat: none;
+  --shadow-soft:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 4px 12px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-elevated:
+    0 4px 6px rgba(0, 0, 0, 0.4),
+    0 12px 28px rgba(0, 0, 0, 0.5),
+    0 24px 48px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 body {
   margin: 0;
   padding: 0;
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
 }
 
 /* Ocultar barras de scroll estridentes */
@@ -18,4 +164,51 @@ body {
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* Utilidades tipográficas — niveles del sistema Notion */
+@layer utilities {
+  .text-display-1 {
+    font-size: var(--text-display-1-size);
+    font-weight: var(--text-display-1-weight);
+    line-height: var(--text-display-1-leading);
+    letter-spacing: var(--text-display-1-tracking);
+  }
+  .text-display-2 {
+    font-size: var(--text-display-2-size);
+    font-weight: var(--text-display-2-weight);
+    line-height: var(--text-display-2-leading);
+    letter-spacing: var(--text-display-2-tracking);
+  }
+  .text-heading-1 {
+    font-size: var(--text-heading-1-size);
+    font-weight: var(--text-heading-1-weight);
+    line-height: var(--text-heading-1-leading);
+    letter-spacing: var(--text-heading-1-tracking);
+  }
+  .text-heading-2 {
+    font-size: var(--text-heading-2-size);
+    font-weight: var(--text-heading-2-weight);
+    line-height: var(--text-heading-2-leading);
+    letter-spacing: var(--text-heading-2-tracking);
+  }
+  .text-heading-3 {
+    font-size: var(--text-heading-3-size);
+    font-weight: var(--text-heading-3-weight);
+    line-height: var(--text-heading-3-leading);
+    letter-spacing: var(--text-heading-3-tracking);
+  }
+  .text-title {
+    font-size: var(--text-title-size);
+    font-weight: var(--text-title-weight);
+    line-height: var(--text-title-leading);
+    letter-spacing: var(--text-title-tracking);
+  }
+  .text-eyebrow {
+    font-size: var(--text-eyebrow-size);
+    font-weight: var(--text-eyebrow-weight);
+    line-height: var(--text-eyebrow-leading);
+    letter-spacing: var(--text-eyebrow-tracking);
+    text-transform: uppercase;
+  }
 }

@@ -1,10 +1,10 @@
 import "./globals.css";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Inter } from "next/font/google";
 
-const jakarta = Plus_Jakarta_Sans({
+const inter = Inter({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
-  variable: "--font-jakarta",
+  variable: "--font-inter",
   display: "swap",
 });
 
@@ -19,7 +19,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="es" className={`dark ${jakarta.variable}`}>
+    <html lang="es" className={`dark ${inter.variable}`}>
       <body className="relative bg-ink text-text antialiased min-h-screen">
         {/* Blobs ambientales, fijos y sin animación: le dan al glassmorphism de la
             sidebar algo real que difuminar, sin costo de repintado por frame. */}

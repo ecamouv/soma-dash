@@ -88,7 +88,7 @@ export default function PasswordChangeForm({
             type="button"
             disabled={saving}
             onClick={handleConfirmChange}
-            className="px-4 py-2 text-xs font-medium text-white bg-gradient-to-r from-brand to-brand2 hover:brightness-110 rounded-md shadow disabled:opacity-50"
+            className="px-4 py-2 text-xs font-medium text-on-primary bg-gradient-to-r from-brand to-brand2 hover:brightness-110 rounded-md shadow disabled:opacity-50"
           >
             {saving ? "Guardando..." : "Sí, cambiar contraseña"}
           </button>
@@ -109,7 +109,7 @@ export default function PasswordChangeForm({
           <button
             type="button"
             onClick={onDone}
-            className="px-4 py-2 text-xs font-medium text-white bg-gradient-to-r from-brand to-brand2 hover:brightness-110 rounded-md shadow"
+            className="px-4 py-2 text-xs font-medium text-on-primary bg-gradient-to-r from-brand to-brand2 hover:brightness-110 rounded-md shadow"
           >
             {doneLabel}
           </button>
@@ -164,7 +164,7 @@ export default function PasswordChangeForm({
         </button>
         <button
           type="submit"
-          className="px-4 py-2 text-xs font-medium text-white bg-gradient-to-r from-brand to-brand2 hover:brightness-110 rounded-md shadow"
+          className="px-4 py-2 text-xs font-medium text-on-primary bg-gradient-to-r from-brand to-brand2 hover:brightness-110 rounded-md shadow"
         >
           Continuar
         </button>

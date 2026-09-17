@@ -1,5 +1,6 @@
 "use client";
 
+import { LuX } from "react-icons/lu";
 import { pieceLabel, type CalendarEvent } from "@/lib/types";
 
 interface EventPreviewModalProps {
@@ -38,7 +39,7 @@ export default function EventPreviewModal({
         {/* Header */}
         <div className="flex items-start justify-between mb-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand2/20 text-brand2 font-bold text-xl border border-brand2/30">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand2/20 text-muted font-bold text-xl border border-muted">
               {initialLetter}
             </div>
             <div>
@@ -52,9 +53,10 @@ export default function EventPreviewModal({
           </div>
           <button
             onClick={onClose}
-            className="text-muted hover:text-text text-xl leading-none"
+            aria-label="Cerrar"
+            className="rounded-md p-1 -m-1 text-muted hover:bg-panel2 hover:text-text"
           >
-            ✕
+            <LuX className="h-5 w-5" />
           </button>
         </div>
 
@@ -87,7 +89,7 @@ export default function EventPreviewModal({
                 {pieces.map((p) => (
                   <span
                     key={p.code}
-                    className="px-2 py-0.5 text-xs font-mono font-normal rounded-md bg-brand2/15 text-brand2 border border-brand2/30"
+                    className="px-2 py-0.5 text-xs font-mono font-normal rounded-md bg-ink-faint text-ink border border-ink-faint"
                   >
                     {pieceLabel(p)}
                   </span>
@@ -150,7 +152,7 @@ export default function EventPreviewModal({
           <button
             type="button"
             onClick={onClose}
-            className="px-6 py-2.5 text-xs font-semibold text-white bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 rounded-xl transition shadow"
+            className="px-6 py-2.5 text-xs font-semibold text-on-primary bg-brand hover:bg-brand2 rounded-xl transition shadow"
           >
             Cerrar
           </button>

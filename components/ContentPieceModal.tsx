@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { LuX } from "react-icons/lu";
 import { pieceLabel, type ContentPiece } from "@/lib/types";
 
 const MONTH_NAMES = [
@@ -70,9 +71,10 @@ export default function ContentPieceModal({
           </div>
           <button
             onClick={onClose}
-            className="text-muted hover:text-text text-xl leading-none"
+            aria-label="Cerrar"
+            className="rounded-md p-1 -m-1 text-muted hover:bg-panel2 hover:text-text"
           >
-            ✕
+            <LuX className="h-5 w-5" />
           </button>
         </div>
 
@@ -150,7 +152,7 @@ export default function ContentPieceModal({
             type="button"
             disabled={saving}
             onClick={handleSave}
-            className="px-4 py-2 text-xs font-medium text-white bg-gradient-to-r from-brand to-brand2 hover:brightness-110 rounded-md shadow disabled:opacity-50"
+            className="px-4 py-2 text-xs font-medium text-on-primary bg-gradient-to-r from-brand to-brand2 hover:brightness-110 rounded-md shadow disabled:opacity-50"
           >
             {saving ? "Guardando..." : "Guardar"}
           </button>

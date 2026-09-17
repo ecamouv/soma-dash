@@ -163,7 +163,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full rounded-xl bg-gradient-to-r from-brand to-brand2 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:brightness-110 disabled:opacity-50 mt-2"
+              className="w-full rounded-xl bg-gradient-to-r from-brand to-brand2 py-2.5 text-sm font-semibold text-on-primary shadow-lg transition hover:brightness-110 disabled:opacity-50 mt-2"
             >
               {isLoading ? "Iniciando sesión..." : "Iniciar Sesión"}
             </button>
@@ -212,7 +212,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={isSendingRecovery}
-              className="w-full rounded-xl bg-gradient-to-r from-brand to-brand2 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:brightness-110 disabled:opacity-50 mt-2"
+              className="w-full rounded-xl bg-gradient-to-r from-brand to-brand2 py-2.5 text-sm font-semibold text-on-primary shadow-lg transition hover:brightness-110 disabled:opacity-50 mt-2"
             >
               {isSendingRecovery ? "Enviando..." : "Enviar enlace de recuperación"}
             </button>

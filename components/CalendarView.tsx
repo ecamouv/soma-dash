@@ -115,14 +115,14 @@ export default function CalendarView({
               onClick={() => onDayClick(iso)}
               className={[
                 "flex min-h-[104px] flex-col items-stretch gap-1 border-b border-r border-line px-2 py-2 text-left transition hover:bg-panel2/60",
-                inMonth ? "bg-transparent" : "bg-black/20",
+                inMonth ? "bg-transparent" : "bg-ink/40",
               ].join(" ")}
             >
               <span
                 className={[
                   "mb-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs",
                   isToday
-                    ? "bg-brand text-white font-semibold"
+                    ? "bg-brand text-on-primary font-semibold"
                     : inMonth
                     ? "text-text"
                     : "text-muted/40",

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { LuX } from "react-icons/lu";
 import type { Client } from "@/lib/types";
 
 const MONTH_NAMES = [
@@ -79,9 +80,10 @@ export default function NewPieceModal({
           <h2 className="text-lg font-bold font-display text-text">Nueva pieza</h2>
           <button
             onClick={onClose}
-            className="text-muted hover:text-text text-xl leading-none"
+            aria-label="Cerrar"
+            className="rounded-md p-1 -m-1 text-muted hover:bg-panel2 hover:text-text"
           >
-            ✕
+            <LuX className="h-5 w-5" />
           </button>
         </div>
 
@@ -112,7 +114,7 @@ export default function NewPieceModal({
                 onClick={() => setType("v")}
                 className={`flex-1 rounded-md border px-3 py-2 text-xs font-semibold transition ${
                   type === "v"
-                    ? "bg-brand2 text-white border-brand2"
+                    ? "bg-brand2 text-on-primary border-brand2"
                     : "bg-panel2 border-line text-muted hover:text-text"
                 }`}
               >
@@ -123,7 +125,7 @@ export default function NewPieceModal({
                 onClick={() => setType("f")}
                 className={`flex-1 rounded-md border px-3 py-2 text-xs font-semibold transition ${
                   type === "f"
-                    ? "bg-brand2 text-white border-brand2"
+                    ? "bg-brand2 text-on-primary border-brand2"
                     : "bg-panel2 border-line text-muted hover:text-text"
                 }`}
               >
@@ -187,7 +189,7 @@ export default function NewPieceModal({
             <button
               type="submit"
               disabled={saving || !clientId}
-              className="px-4 py-2 text-xs font-medium text-white bg-gradient-to-r from-brand to-brand2 hover:brightness-110 rounded-md shadow disabled:opacity-50"
+              className="px-4 py-2 text-xs font-medium text-on-primary bg-gradient-to-r from-brand to-brand2 hover:brightness-110 rounded-md shadow disabled:opacity-50"
             >
               {saving ? "Creando..." : "Crear pieza"}
             </button>

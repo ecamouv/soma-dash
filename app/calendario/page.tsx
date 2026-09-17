@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { LuX } from "react-icons/lu";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
 import StatsBar from "@/components/StatsBar";
@@ -230,9 +231,10 @@ export default function DashboardPage() {
               <span>{errorMsg}</span>
               <button
                 onClick={() => setErrorMsg(null)}
-                className="shrink-0 text-red-300 hover:text-red-100"
+                aria-label="Cerrar aviso"
+                className="shrink-0 rounded-md p-1 -m-1 text-red-300 hover:bg-red-500/10 hover:text-red-100"
               >
-                ✕
+                <LuX className="h-4 w-4" />
               </button>
             </div>
           )}

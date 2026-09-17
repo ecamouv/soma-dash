@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { LuSnowflake, LuPlay, LuLink, LuCheck } from "react-icons/lu";
+import { LuSnowflake, LuPlay, LuLink, LuCheck, LuX } from "react-icons/lu";
 import type { Client } from "@/lib/types";
 
 interface PauseClientModalProps {
@@ -76,9 +76,10 @@ export default function PauseClientModal({
           </div>
           <button
             onClick={onClose}
-            className="text-muted hover:text-text text-xl leading-none"
+            aria-label="Cerrar"
+            className="rounded-md p-1 -m-1 text-muted hover:bg-panel2 hover:text-text"
           >
-            ✕
+            <LuX className="h-5 w-5" />
           </button>
         </div>
         <p className="text-[11px] text-muted mb-4">

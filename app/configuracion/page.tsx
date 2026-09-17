@@ -93,7 +93,7 @@ export default function ConfiguracionPage() {
               </div>
               <button
                 onClick={() => setIsChangePasswordOpen(true)}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-brand to-brand2 hover:brightness-110 rounded-md shadow"
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-on-primary bg-gradient-to-r from-brand to-brand2 hover:brightness-110 rounded-md shadow"
               >
                 <LuKeyRound className="h-3.5 w-3.5" />
                 Cambiar contraseña

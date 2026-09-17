@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { LuTrash2 } from "react-icons/lu";
+import { LuTrash2, LuX } from "react-icons/lu";
 import type { Client, ClientPayment } from "@/lib/types";
 import { fetchClientPayments, createClientPayment, deleteClientPayment } from "@/lib/payments";
 
@@ -87,8 +87,12 @@ export default function PaymentsModal({ isOpen, onClose, clients }: PaymentsModa
       <div className="w-full max-w-sm rounded-2xl border border-line bg-panel p-6 shadow-2xl text-text">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold font-display text-text">Fechas de pago</h2>
-          <button onClick={onClose} className="text-muted hover:text-text text-xl leading-none">
-            ✕
+          <button
+            onClick={onClose}
+            aria-label="Cerrar"
+            className="rounded-md p-1 -m-1 text-muted hover:bg-panel2 hover:text-text"
+          >
+            <LuX className="h-5 w-5" />
           </button>
         </div>
 

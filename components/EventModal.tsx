@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { LuX } from "react-icons/lu";
 import { pieceLabel, type CalendarEvent, type Client, type ContentPiece, type EventType, type Profile } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
 
@@ -318,9 +319,10 @@ export default function EventModal({
                     </div>
                     <button
                         onClick={onClose}
-                        className="text-muted hover:text-text text-xl leading-none"
+                        aria-label="Cerrar"
+                        className="rounded-md p-1 -m-1 text-muted hover:bg-panel2 hover:text-text"
                     >
-                        ✕
+                        <LuX className="h-5 w-5" />
                     </button>
                 </div>
 
@@ -390,6 +392,7 @@ export default function EventModal({
                                     <label className="text-xs font-medium text-muted">
                                         Piezas a grabar
                                     </label>
+                                    <div className="flex items-center gap-1 border-ink-faint rounded-md border bg-panel2 px-1.5 py-0.5">
                                     <button
                                         type="button"
                                         onClick={goToPrevCatalogMonth}
@@ -410,12 +413,13 @@ export default function EventModal({
                                     >
                                         ›
                                     </button>
+                                    </div>
                                 </div>
                                 {selectablePieces.length > 0 && (
                                     <button
                                         type="button"
                                         onClick={handleToggleSelectAll}
-                                        className="text-[11px] font-medium text-brand2 hover:underline focus:outline-none"
+                                        className="text-[11px] font-medium text-ink-faint hover:text-muted focus:outline-none"
                                     >
                                         {areAllSelected ? "Desmarcar todas" : "Seleccionar todas"}
                                     </button>
@@ -453,9 +457,9 @@ export default function EventModal({
                                             className={[
                                                 "max-w-[10rem] px-2.5 py-1 text-xs font-mono rounded-md border transition flex items-center gap-1",
                                                 isRecordedElsewhere
-                                                    ? "opacity-40 bg-zinc-800 border-zinc-700 text-zinc-500 cursor-not-allowed line-through"
+                                                    ? "opacity-40 bg-panel2 border-line text-ink-faint cursor-not-allowed line-through"
                                                     : isSelected
-                                                        ? "bg-brand2 text-white border-brand2 font-semibold shadow"
+                                                        ? "bg-brand2 text-on-primary border-brand2 font-semibold shadow"
                                                         : "bg-panel border-line text-text hover:border-brand2/60",
                                             ].join(" ")}
                                         >
@@ -604,7 +608,7 @@ export default function EventModal({
                             </button>
                             <button
                                 type="submit"
-                                className="px-4 py-2 text-xs font-medium text-white bg-gradient-to-r from-brand to-brand2 hover:brightness-110 rounded-md shadow"
+                                className="px-4 py-2 text-xs font-medium text-on-primary bg-gradient-to-r from-brand to-brand2 hover:brightness-110 rounded-md shadow"
                             >
                                 Guardar Evento
                             </button>

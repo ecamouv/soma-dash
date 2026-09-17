@@ -1,5 +1,6 @@
 "use client";
 
+import { LuX } from "react-icons/lu";
 import PasswordChangeForm from "@/components/PasswordChangeForm";
 
 interface ChangePasswordModalProps {
@@ -17,9 +18,10 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
           <h2 className="text-lg font-bold font-display text-text">Cambiar contraseña</h2>
           <button
             onClick={onClose}
-            className="text-muted hover:text-text text-xl leading-none"
+            aria-label="Cerrar"
+            className="rounded-md p-1 -m-1 text-muted hover:bg-panel2 hover:text-text"
           >
-            ✕
+            <LuX className="h-5 w-5" />
           </button>
         </div>
 
