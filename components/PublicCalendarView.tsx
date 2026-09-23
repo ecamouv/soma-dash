@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { LuVideo, LuUsers, LuPackage, LuReceipt, LuChevronLeft, LuChevronRight } from "react-icons/lu";
+import { useEffect, useMemo, useState } from "react";
+import { LuVideo, LuUsers, LuPackage, LuReceipt, LuChevronLeft, LuChevronRight, LuX, LuClock, LuMapPin } from "react-icons/lu";
 
 export type PublicCalendarItemType = "grabacion" | "junta" | "entrega" | "pago";
 
@@ -73,6 +73,17 @@ export default function PublicCalendarView({ items }: { items: PublicCalendarIte
   const [month, setMonth] = useState(() => new Date());
   const days = useMemo(() => buildGrid(month), [month]);
   const todayISO = toISO(new Date());
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!selectedDate) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSelectedDate(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedDate]);
+
 
   const itemsByDate = useMemo(() => {
     const map = new Map<string, PublicCalendarItem[]>();
@@ -83,6 +94,8 @@ export default function PublicCalendarView({ items }: { items: PublicCalendarIte
     }
     return map;
   }, [items]);
+
+  const selectedItems = selectedDate ? itemsByDate.get(selectedDate) ?? [] : [];
 
   return (
     <div className="space-y-4">
@@ -152,9 +165,23 @@ export default function PublicCalendarView({ items }: { items: PublicCalendarIte
             return (
               <div
                 key={iso}
+                role={dayItems.length > 0 ? "button" : undefined}
+                tabIndex={dayItems.length > 0 ? 0 : undefined}
+                onClick={dayItems.length > 0 ? () => setSelectedDate(iso) : undefined}
+                onKeyDown={
+                  dayItems.length > 0
+                    ? (e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelectedDate(iso);
+                        }
+                      }
+                    : undefined
+                }
                 className={[
                   "flex min-h-[104px] max-h-[168px] flex-col gap-1 overflow-y-auto border-b border-r border-[#E6E2DA] px-1.5 py-1.5",
                   inMonth ? "bg-white" : "bg-[#FAF9F6]",
+                  dayItems.length > 0 ? "cursor-pointer transition hover:bg-[#F7F5F2]" : "",
                 ].join(" ")}
               >
                 <span
@@ -176,7 +203,6 @@ export default function PublicCalendarView({ items }: { items: PublicCalendarIte
                   return (
                     <div
                       key={i}
-                      title={item.title}
                       className={`flex items-center gap-1 rounded px-1 py-0.5 text-[10px] leading-tight ${meta.chip}`}
                     >
                       <Icon className="h-2.5 w-2.5 shrink-0" />
@@ -189,6 +215,76 @@ export default function PublicCalendarView({ items }: { items: PublicCalendarIte
           })}
         </div>
       </div>
+
+      {selectedDate && selectedItems.length > 0 && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setSelectedDate(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-2xl border border-[#E6E2DA] bg-white p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-base font-semibold capitalize text-[#2A2823]">
+                  {new Date(`${selectedDate}T00:00:00`).toLocaleDateString("es-MX", {
+                    weekday: "long",
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </h3>
+                <p className="text-xs text-[#8A8680]">
+                  {selectedItems.length} {selectedItems.length === 1 ? "elemento" : "elementos"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedDate(null)}
+                aria-label="Cerrar"
+                className="-m-1 rounded-md p-1 text-[#8A8680] hover:bg-[#F7F5F2] hover:text-[#2A2823]"
+              >
+                <LuX className="h-4 w-4" />
+              </button>
+            </div>
+
+            <ul className="space-y-3">
+              {selectedItems.map((item, i) => {
+                const meta = TYPE_META[item.type];
+                const Icon = meta.icon;
+                return (
+                  <li key={i} className="space-y-1.5 rounded-xl border border-[#E6E2DA] p-3">
+                    <span
+                      className={`inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-[11px] font-medium ${meta.chip}`}
+                    >
+                      <Icon className="h-3 w-3" />
+                      {meta.label}
+                    </span>
+                    <p className="break-words text-sm font-semibold text-[#2A2823]">{item.title}</p>
+                    {(item.time || item.location) && (
+                      <div className="space-y-1 text-xs text-[#8A8680]">
+                        {item.time && (
+                          <p className="flex items-center gap-1.5">
+                            <LuClock className="h-3 w-3" /> {item.time}
+                          </p>
+                        )}
+                        {item.location && (
+                          <p className="flex items-center gap-1.5">
+                            <LuMapPin className="h-3 w-3" /> {item.location}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

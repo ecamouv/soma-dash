@@ -60,7 +60,7 @@ export default function CalendarView({
   }
 
   return (
-    <div className="mx-6 mb-8 mt-6 overflow-hidden rounded-card border border-line bg-panel">
+    <div className="mx-6 mb-8 mt-6 shrink-0 overflow-hidden rounded-card border border-line bg-panel">
       <div className="flex items-center justify-between border-b border-line px-5 py-4">
         <h2 className="font-display text-lg font-semibold text-text">
           {MONTH_NAMES[month.getMonth()]} {month.getFullYear()}
@@ -114,7 +114,7 @@ export default function CalendarView({
               key={iso}
               onClick={() => onDayClick(iso)}
               className={[
-                "flex min-h-[104px] flex-col items-stretch gap-1 border-b border-r border-line px-2 py-2 text-left transition hover:bg-panel2/60",
+                "flex h-[120px] flex-col items-stretch gap-1 overflow-hidden border-b border-r border-line px-2 py-2 text-left transition hover:bg-panel2/60",
                 inMonth ? "bg-transparent" : "bg-ink/40",
               ].join(" ")}
             >

@@ -32,7 +32,13 @@ export default function ActualizarContrasenaPage() {
       return;
     }
 
+    // Links de invitación (Equipo > Agregar integrante) llegan con type=invite y
+    // Supabase los resuelve como SIGNED_IN, no como PASSWORD_RECOVERY.
+    const isInvite =
+      queryParams.get("type") === "invite" || hashParams.get("type") === "invite";
+
     const hasRecoveryParams =
+      isInvite ||
       queryParams.has("code") ||
       hashParams.has("access_token") ||
       queryParams.get("type") === "recovery" ||
@@ -46,8 +52,18 @@ export default function ActualizarContrasenaPage() {
     // Supabase detecta el código/token en la URL al inicializar el cliente y, si es
     // válido, emite este evento con la sesión temporal de recovery ya lista.
     const { data: subscription } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "PASSWORD_RECOVERY") setStatus("ready");
+      if (event === "PASSWORD_RECOVERY" || (isInvite && event === "SIGNED_IN")) {
+        setStatus("ready");
+      }
     });
+
+    // Si el cliente ya procesó el link antes de suscribirnos, el evento no se repite:
+    // para invitaciones basta con que la sesión ya exista.
+    if (isInvite) {
+      supabase.auth.getSession().then(({ data }) => {
+        if (data.session) setStatus("ready");
+      });
+    }
 
     // Si el código ya expiró o es inválido, Supabase no emite el evento -- después
     // de un momento razonable para el intercambio de red, lo tratamos como inválido.

@@ -100,3 +100,80 @@ export interface CalendarEvent {
   members: EventMember[];
   content_pieces: ContentPiece[];
 }
+export type ProspectStage =
+  | "nuevo"
+  | "contactado"
+  | "reunion"
+  | "propuesta"
+  | "negociacion"
+  | "ganado"
+  | "perdido";
+
+export const PROSPECT_STAGES: ProspectStage[] = [
+  "nuevo",
+  "contactado",
+  "reunion",
+  "propuesta",
+  "negociacion",
+  "ganado",
+  "perdido",
+];
+
+export const PROSPECT_STAGE_LABEL: Record<ProspectStage, string> = {
+  nuevo: "Nuevo",
+  contactado: "Contactado",
+  reunion: "Reunión",
+  propuesta: "Propuesta",
+  negociacion: "Negociación",
+  ganado: "Ganado",
+  perdido: "Perdido",
+};
+
+export const PROSPECT_STAGE_COLOR: Record<ProspectStage, string> = {
+  nuevo: "#718096",
+  contactado: "#3182CE",
+  reunion: "#319795",
+  propuesta: "#805AD5",
+  negociacion: "#DD6B20",
+  ganado: "#38A169",
+  perdido: "#E53E3E",
+};
+
+export interface Prospect {
+  id: string;
+  name: string;
+  contact_name?: string | null;
+  contact_role?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  market?: string | null;
+  city?: string | null;
+  instagram?: string | null;
+  facebook?: string | null;
+  tiktok?: string | null;
+  website?: string | null;
+  source?: string | null;
+  stage: ProspectStage;
+  estimated_value?: number | null;
+  next_step?: string | null;
+  next_step_date?: string | null;
+  notes?: string | null;
+  owner_id?: string | null;
+  converted_client_id?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ProspectInput = Omit<
+  Prospect,
+  "id" | "created_at" | "updated_at" | "converted_client_id"
+>;
+
+export interface ProspectActivity {
+  id: string;
+  prospect_id: string;
+  note: string;
+  created_by?: string | null;
+  created_at: string;
+  author?: Pick<Profile, "full_name" | "initials"> | null;
+}

@@ -2,16 +2,19 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { LuUsers, LuSnowflake, LuReceipt } from "react-icons/lu";
+import { LuChevronLeft, LuChevronRight } from "react-icons/lu";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
-import NewClientModal from "@/components/NewClientModal";
-import PauseClientModal from "@/components/PauseClientModal";
-import PaymentsModal from "@/components/PaymentsModal";
-import type { Client, Profile } from "@/lib/types";
-import { createClientWithPackage, fetchClients, setClientPaused } from "@/lib/events";
+import StatTiles from "@/components/home/StatTiles";
+import EventsSection from "@/components/home/EventsSection";
+import PublishedSection from "@/components/home/PublishedSection";
+import ShotClientsSection from "@/components/home/ShotClientsSection";
+import ProspectsSection from "@/components/home/ProspectsSection";
+import PaymentsSection from "@/components/home/PaymentsSection";
+import UpcomingSection from "@/components/home/UpcomingSection";
+import type { Profile } from "@/lib/types";
+import { fetchWeeklyRecap, weekRange, type WeeklyRecap } from "@/lib/weekly";
 import { createClient } from "@/lib/supabase/client";
-import { PACKAGES } from "@/lib/packages";
 
 export default function SomaHomePage() {
   const router = useRouter();
@@ -20,19 +23,10 @@ export default function SomaHomePage() {
   const [currentUser, setCurrentUser] = useState<Profile | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
 
-  const [clients, setClients] = useState<Client[]>([]);
-  const [isNewClientOpen, setIsNewClientOpen] = useState(false);
-  const [isPauseClientOpen, setIsPauseClientOpen] = useState(false);
-  const [isPaymentsOpen, setIsPaymentsOpen] = useState(false);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
-
-  const loadClients = async () => {
-    try {
-      setClients(await fetchClients());
-    } catch (err) {
-      console.error("Error al cargar clientes:", err);
-    }
-  };
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [recap, setRecap] = useState<WeeklyRecap | null>(null);
+  const [loadingRecap, setLoadingRecap] = useState(true);
+  const [recapError, setRecapError] = useState<string | null>(null);
 
   useEffect(() => {
     const checkUser = async () => {
@@ -67,8 +61,21 @@ export default function SomaHomePage() {
   }, [router, supabase]);
 
   useEffect(() => {
-    if (!loadingAuth) loadClients();
-  }, [loadingAuth]);
+    if (loadingAuth) return;
+    let cancelled = false;
+    setLoadingRecap(true);
+    setRecapError(null);
+    fetchWeeklyRecap(weekRange(weekOffset))
+      .then((r) => !cancelled && setRecap(r))
+      .catch((err) => {
+        console.error("Error al cargar el resumen semanal:", err);
+        if (!cancelled) setRecapError("No se pudo cargar el resumen semanal.");
+      })
+      .finally(() => !cancelled && setLoadingRecap(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [loadingAuth, weekOffset]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -84,22 +91,9 @@ export default function SomaHomePage() {
     );
   }
 
-  const handleCreateClient: React.ComponentProps<typeof NewClientModal>["onCreate"] = async (input) => {
-    setSuccessMsg(null);
-    await createClientWithPackage(input.name, input.packageValue);
-    setSuccessMsg(`Cliente "${input.name}" agregado con ${PACKAGES[input.packageValue].label}.`);
-    await loadClients();
-  };
-
-  const handlePauseClient = async (clientId: string) => {
-    await setClientPaused(clientId, true);
-    await loadClients();
-  };
-
-  const handleResumeClient = async (clientId: string) => {
-    await setClientPaused(clientId, false);
-    await loadClients();
-  };
+  const range = weekRange(weekOffset);
+  const fmt = (d: string) =>
+    new Date(`${d}T00:00:00`).toLocaleDateString("es-MX", { day: "numeric", month: "short" });
 
   return (
     <div className="flex h-screen text-text">
@@ -107,99 +101,63 @@ export default function SomaHomePage() {
       <div className="flex flex-1 flex-col overflow-y-auto bg-ink">
         <TopBar profile={currentUser} onLogout={handleLogout} />
 
-        <div className="p-6 space-y-6 max-w-4xl">
-          <div>
-            <span className="text-xs text-muted">Soma</span>
-            <h1 className="text-2xl font-bold font-display bg-gradient-to-r from-text to-muted bg-clip-text text-transparent">Bienvenido a Soma</h1>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div className="overflow-hidden rounded-2xl border border-line bg-panel shadow-sm">
-              <div className="h-1 bg-gradient-to-r from-brand to-brand2" />
-              <div className="p-5 space-y-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand/20 to-brand2/20 text-brand2">
-                    <LuUsers className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-bold text-text">Clientes</h2>
-                    <p className="text-[11px] text-muted">Agrega un cliente y su paquete de contenido</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setIsNewClientOpen(true)}
-                  className="px-4 py-2 text-xs font-semibold text-on-primary bg-gradient-to-r from-brand to-brand2 hover:brightness-110 rounded-md shadow"
-                >
-                  + Agregar Cliente
-                </button>
-                {successMsg && <p className="text-xs text-emerald-400">{successMsg}</p>}
-              </div>
+        <div className="p-6 space-y-6 max-w-6xl">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <span className="text-xs text-muted">Soma › Resumen semanal</span>
+              <h1 className="text-2xl font-bold font-display bg-gradient-to-r from-text to-muted bg-clip-text text-transparent">
+                Resumen semanal
+              </h1>
             </div>
-
-            <div className="overflow-hidden rounded-2xl border border-line bg-panel shadow-sm">
-              <div className="h-1 bg-gradient-to-r from-blue-600 to-blue-400" />
-              <div className="p-5 space-y-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400">
-                    <LuSnowflake className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-bold text-text">Pausar cliente</h2>
-                    <p className="text-[11px] text-muted">Congela su logística sin borrar nada</p>
-                  </div>
-                </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setWeekOffset((o) => o - 1)}
+                aria-label="Semana anterior"
+                className="rounded-md border border-line p-2 text-muted hover:text-text"
+              >
+                <LuChevronLeft className="h-4 w-4" />
+              </button>
+              <span className="min-w-40 text-center text-xs font-semibold">
+                {fmt(range.start)} - {fmt(range.end)}
+                {weekOffset === 0 ? " (esta semana)" : ""}
+              </span>
+              <button
+                onClick={() => setWeekOffset((o) => o + 1)}
+                aria-label="Semana siguiente"
+                className="rounded-md border border-line p-2 text-muted hover:text-text"
+              >
+                <LuChevronRight className="h-4 w-4" />
+              </button>
+              {weekOffset !== 0 && (
                 <button
-                  onClick={() => setIsPauseClientOpen(true)}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-blue-600 to-blue-500 hover:brightness-110 rounded-md shadow"
+                  onClick={() => setWeekOffset(0)}
+                  className="rounded-md border border-line px-3 py-2 text-xs font-semibold text-muted hover:text-text"
                 >
-                  Pausar / Reanudar
+                  Hoy
                 </button>
-              </div>
-            </div>
-
-            <div className="overflow-hidden rounded-2xl border border-line bg-panel shadow-sm">
-              <div className="h-1 bg-gradient-to-r from-emerald-600 to-emerald-400" />
-              <div className="p-5 space-y-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400">
-                    <LuReceipt className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-bold text-text">Pagos</h2>
-                    <p className="text-[11px] text-muted">Registra fechas de pago por cliente</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setIsPaymentsOpen(true)}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-emerald-600 to-emerald-500 hover:brightness-110 rounded-md shadow"
-                >
-                  + Agregar pago
-                </button>
-              </div>
+              )}
             </div>
           </div>
+
+          {recapError && <p className="text-xs text-red-500">{recapError}</p>}
+
+          {loadingRecap || !recap ? (
+            <div className="p-4 text-xs text-muted">Cargando resumen...</div>
+          ) : (
+            <>
+              <StatTiles recap={recap} />
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <EventsSection events={recap.events} />
+                <PublishedSection pieces={recap.publishedPieces} />
+                <ShotClientsSection shot={recap.shotClients} />
+                <ProspectsSection recap={recap} />
+                <PaymentsSection payments={recap.payments} />
+                <UpcomingSection events={recap.upcoming} />
+              </div>
+            </>
+          )}
         </div>
       </div>
-
-      <NewClientModal
-        isOpen={isNewClientOpen}
-        onClose={() => setIsNewClientOpen(false)}
-        onCreate={handleCreateClient}
-      />
-
-      <PauseClientModal
-        isOpen={isPauseClientOpen}
-        onClose={() => setIsPauseClientOpen(false)}
-        clients={clients}
-        onPause={handlePauseClient}
-        onResume={handleResumeClient}
-      />
-
-      <PaymentsModal
-        isOpen={isPaymentsOpen}
-        onClose={() => setIsPaymentsOpen(false)}
-        clients={clients}
-      />
     </div>
   );
 }
