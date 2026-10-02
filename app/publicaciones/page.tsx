@@ -6,6 +6,8 @@ import { LuX } from "react-icons/lu";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
 import ContentPieceModal from "@/components/ContentPieceModal";
+import PautaSection from "@/components/PautaSection";
+import { updatePautaPost, type PautaPost } from "@/lib/pauta";
 import { pieceLabel, type ContentPiece, type Client, type Profile } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
 import { updatePieceStatus, updatePieceDueDateAndName } from "@/lib/deliveries";
@@ -54,6 +56,8 @@ export default function PublicacionesPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [selectedPiece, setSelectedPiece] = useState<ContentPiece | null>(null);
   const [dragOverIso, setDragOverIso] = useState<string | null>(null);
+  // Posts de clientes de pauta, compartidos entre el calendario y la sección de pauta.
+  const [pautaPosts, setPautaPosts] = useState<PautaPost[]>([]);
 
   // Los clientes pausados se filtran por completo: ni sus piezas ni ellos mismos
   // aparecen en ningún lado de Publicaciones (calendario, alertas, selector).
@@ -156,7 +160,29 @@ export default function PublicacionesPage() {
     );
   }, [filteredPieces]);
 
+  // Clientes con paquete "Solamente Pauta"
+  const pautaClients = useMemo(
+    () =>
+      clients.filter(
+        (c) => c.package === "solamente_pauta" && (selectedClientId === "all" || c.id === selectedClientId)
+      ),
+    [clients, selectedClientId]
+  );
+
   const days = useMemo(() => buildGrid(month), [month]);
+
+  const pautaByDate = useMemo(() => {
+    const allowed = new Map(pautaClients.map((c) => [c.id, c]));
+    const map = new Map<string, (PautaPost & { clientName: string })[]>();
+    for (const p of pautaPosts) {
+      const client = allowed.get(p.client_id);
+      if (!client || !p.scheduled_date) continue;
+      const list = map.get(p.scheduled_date) ?? [];
+      list.push({ ...p, clientName: client.name });
+      map.set(p.scheduled_date, list);
+    }
+    return map;
+  }, [pautaPosts, pautaClients]);
   const todayISO = toISO(new Date());
 
   const handleToggle = async (piece: ContentPiece, checked: boolean) => {
@@ -172,6 +198,22 @@ export default function PublicacionesPage() {
       console.error("Error al actualizar publicación:", err);
       setErrorMsg(
         `No se pudo actualizar ${pieceLabel(piece)}: ${err instanceof Error ? err.message : String(err)}`
+      );
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const handlePautaToggle = async (post: PautaPost, checked: boolean) => {
+    setSavingId(post.id);
+    setErrorMsg(null);
+    try {
+      await updatePautaPost(post.id, { published: checked });
+      setPautaPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, published: checked } : p)));
+    } catch (err) {
+      console.error("Error al actualizar post de pauta:", err);
+      setErrorMsg(
+        `No se pudo actualizar ${post.name}: ${err instanceof Error ? err.message : String(err)}`
       );
     } finally {
       setSavingId(null);
@@ -327,6 +369,7 @@ export default function PublicacionesPage() {
                     const inMonth = d.getMonth() === month.getMonth();
                     const isToday = iso === todayISO;
                     const dayPieces = piecesByDate.get(iso) ?? [];
+                    const dayPauta = pautaByDate.get(iso) ?? [];
                     const isDragOver = dragOverIso === iso;
 
                     return (
@@ -411,11 +454,47 @@ export default function PublicacionesPage() {
                             </Wrapper>
                           );
                         })}
+
+                        {dayPauta.map((post) => (
+                          <label
+                            key={post.id}
+                            title="Post de pauta"
+                            className={`flex items-center gap-1.5 rounded px-1 py-0.5 text-[10px] leading-tight cursor-pointer ${
+                              post.published
+                                ? "bg-emerald-500/10 text-emerald-300"
+                                : "bg-teal-500/10 text-teal-300"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={post.published}
+                              disabled={savingId === post.id}
+                              onChange={(e) => handlePautaToggle(post, e.target.checked)}
+                              className="h-3 w-3 accent-emerald-500"
+                            />
+                            <span className="font-mono truncate">{post.name}</span>
+                            <span className="truncate opacity-70">{post.clientName}</span>
+                          </label>
+                        ))}
                       </div>
                     );
                   })}
                 </div>
               </div>
+
+              {/* Clientes de solo pauta: posts semanales generados por mes, debajo del calendario. */}
+              {(selectedClientId === "all" || pautaClients.length > 0) && (
+                <PautaSection
+                  clients={pautaClients}
+                  allClients={clients}
+                  month={month}
+                  posts={pautaPosts}
+                  setPosts={setPautaPosts}
+                  rangeStart={toISO(days[0])}
+                  rangeEnd={toISO(days[days.length - 1])}
+                  onError={setErrorMsg}
+                />
+              )}
 
               {/* Aprobadas sin fecha de publicación: debajo del calendario, por cliente.
                   Clic para elegir fecha, o arrastrar directo a un día del calendario. */}

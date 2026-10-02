@@ -481,6 +481,36 @@ export default function DeliveriesPage() {
     });
   };
 
+  // Colapso por cliente dentro de cada columna del kanban. Clave "status:clientId".
+  // Es independiente del mes (no se borra al navegar) y persiste en localStorage.
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("entregas:kanbanCollapsedGroups");
+      if (stored) {
+        const arr = JSON.parse(stored);
+        if (Array.isArray(arr)) setCollapsedGroups(new Set(arr.filter((x) => typeof x === "string")));
+      }
+    } catch {
+      // localStorage no disponible o JSON inválido -- se ignora.
+    }
+  }, []);
+
+  const toggleGroupCollapsed = (groupKey: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) next.delete(groupKey);
+      else next.add(groupKey);
+      try {
+        localStorage.setItem("entregas:kanbanCollapsedGroups", JSON.stringify(Array.from(next)));
+      } catch {
+        // localStorage no disponible -- el estado en memoria sigue funcionando igual.
+      }
+      return next;
+    });
+  };
+
   const getClientSort = (key: string) => clientSort[key] ?? { by: "code" as const, dir: "asc" as const };
 
   const toggleClientSort = (key: string, by: "code" | "due_date") => {
@@ -892,23 +922,37 @@ export default function DeliveriesPage() {
                         </div>
                       )}
 
-                      {groups.map((g) => (
+                      {groups.map((g) => {
+                        const groupKey = `${col.status}:${g.key}`;
+                        const isGroupCollapsed =
+                          selectedClientId === "all" && collapsedGroups.has(groupKey);
+                        const groupColor = clientColorMap.get(g.key) ?? defaultClientColor(0);
+                        return (
                         <div key={g.key}>
                           {selectedClientId === "all" && (
-                            <div className="sticky top-0 z-10 -mx-2 mb-1 flex items-center gap-1.5 bg-panel/95 px-2 py-1 backdrop-blur-sm">
+                            <button
+                              type="button"
+                              onClick={() => toggleGroupCollapsed(groupKey)}
+                              aria-expanded={!isGroupCollapsed}
+                              className="sticky top-0 z-10 -mx-2 mb-1 flex w-[calc(100%+1rem)] items-center gap-1.5 bg-panel/95 px-2 py-1 text-left backdrop-blur-sm"
+                            >
                               <span
                                 className="h-1.5 w-1.5 shrink-0 rounded-full"
-                                style={{
-                                  backgroundColor: clientColorMap.get(g.key) ?? defaultClientColor(0),
-                                }}
+                                style={{ backgroundColor: groupColor }}
                               />
                               <span className="truncate text-[10px] font-semibold uppercase tracking-wide text-muted">
                                 {g.client?.name ?? "Sin cliente"}
                               </span>
                               <span className="text-[9px] text-muted/50">({g.pieces.length})</span>
-                            </div>
+                              <LuChevronRight
+                                className={`h-3 w-3 shrink-0 text-muted transition-transform ${
+                                  isGroupCollapsed ? "" : "rotate-90"
+                                }`}
+                              />
+                            </button>
                           )}
 
+                          {!isGroupCollapsed && (
                           <div className="space-y-1">
                             {g.pieces.map((piece) => {
                               const nextStatus = NEXT_STATUS[piece.status];
@@ -1013,8 +1057,10 @@ export default function DeliveriesPage() {
                               );
                             })}
                           </div>
+                          )}
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   );
                 })}
