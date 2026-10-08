@@ -5,15 +5,12 @@ import { useRouter } from "next/navigation";
 import { LuChevronLeft, LuChevronRight } from "react-icons/lu";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
-import StatTiles from "@/components/home/StatTiles";
-import EventsSection from "@/components/home/EventsSection";
-import PublishedSection from "@/components/home/PublishedSection";
-import ShotClientsSection from "@/components/home/ShotClientsSection";
-import ProspectsSection from "@/components/home/ProspectsSection";
-import PaymentsSection from "@/components/home/PaymentsSection";
-import UpcomingSection from "@/components/home/UpcomingSection";
+import WeekHeadline from "@/components/home/WeekHeadline";
+import WeekCurve from "@/components/home/WeekCurve";
+import PipelineBar from "@/components/home/PipelineBar";
+import NextWeek from "@/components/home/NextWeek";
 import type { Profile } from "@/lib/types";
-import { fetchWeeklyRecap, weekRange, type WeeklyRecap } from "@/lib/weekly";
+import { fetchWeeklyRecap, iso, weekRange, type WeeklyRecap } from "@/lib/weekly";
 import { createClient } from "@/lib/supabase/client";
 
 export default function SomaHomePage() {
@@ -92,6 +89,7 @@ export default function SomaHomePage() {
   }
 
   const range = weekRange(weekOffset);
+  const todayISO = iso(new Date());
   const fmt = (d: string) =>
     new Date(`${d}T00:00:00`).toLocaleDateString("es-MX", { day: "numeric", month: "short" });
 
@@ -101,7 +99,7 @@ export default function SomaHomePage() {
       <div className="flex flex-1 flex-col overflow-y-auto bg-ink">
         <TopBar profile={currentUser} onLogout={handleLogout} />
 
-        <div className="p-6 space-y-6 max-w-6xl">
+        <div className="p-6 space-y-6 max-w-5xl">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <span className="text-xs text-muted">Soma › Resumen semanal</span>
@@ -145,15 +143,16 @@ export default function SomaHomePage() {
             <div className="p-4 text-xs text-muted">Cargando resumen...</div>
           ) : (
             <>
-              <StatTiles recap={recap} />
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                <EventsSection events={recap.events} />
-                <PublishedSection pieces={recap.publishedPieces} />
-                <ShotClientsSection shot={recap.shotClients} />
-                <ProspectsSection recap={recap} />
-                <PaymentsSection payments={recap.payments} />
-                <UpcomingSection events={recap.upcoming} />
+              <WeekHeadline recap={recap} todayISO={todayISO} />
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+                <div className="lg:col-span-3">
+                  <WeekCurve key={recap.range.start} recap={recap} todayISO={todayISO} />
+                </div>
+                <div className="lg:col-span-2">
+                  <PipelineBar pieces={recap.openPieces} todayISO={todayISO} />
+                </div>
               </div>
+              <NextWeek events={recap.upcoming} />
             </>
           )}
         </div>

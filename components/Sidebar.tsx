@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { LuCalendar, LuPackageCheck, LuCalendarCheck, LuUsers, LuSettings, LuAlbum, LuUsersRound } from "react-icons/lu";
+import { LuCalendar, LuPackageCheck, LuCalendarCheck, LuUsers, LuSettings, LuAlbum, LuUsersRound, LuLightbulb } from "react-icons/lu";
 
 function NavLink({
   href,
@@ -67,6 +67,11 @@ export default function Sidebar() {
       label: "Publicaciones",
       href: "/publicaciones",
       icon: LuCalendarCheck,
+    },
+    {
+      label: "Inspiración",
+      href: "/inspiracion",
+      icon: LuLightbulb,
     },
     {
       label: "Clientes",

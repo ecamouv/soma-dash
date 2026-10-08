@@ -5,20 +5,10 @@ import { useRouter } from "next/navigation";
 import { LuLink, LuCheck, LuExternalLink, LuBookOpen, LuPlus, LuReceipt, LuSnowflake, LuPlay } from "react-icons/lu";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
-import ProspectsBoard from "@/components/ProspectsBoard";
-import ProspectModal from "@/components/ProspectModal";
 import NewClientModal from "@/components/NewClientModal";
 import PaymentsModal from "@/components/PaymentsModal";
-import type { Client, Profile, Prospect, ProspectInput, ProspectStage } from "@/lib/types";
+import type { Client, Profile } from "@/lib/types";
 import { createClientWithPackage, fetchClients, setClientColor, setClientPaused } from "@/lib/events";
-import {
-  createProspect,
-  deleteProspect,
-  fetchProfiles,
-  fetchProspects,
-  updateProspect,
-} from "@/lib/prospects";
-import type { PackageValue } from "@/lib/packages";
 import { PACKAGES } from "@/lib/packages";
 import { defaultClientColor } from "@/lib/clientColors";
 import { createClient } from "@/lib/supabase/client";
@@ -155,16 +145,9 @@ export default function ClientesPage() {
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"clientes" | "prospectos">("clientes");
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [isNewClientOpen, setIsNewClientOpen] = useState(false);
   const [isPaymentsOpen, setIsPaymentsOpen] = useState(false);
-  const [prospects, setProspects] = useState<Prospect[]>([]);
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [prospectModal, setProspectModal] = useState<{ open: boolean; prospect: Prospect | null }>({
-    open: false,
-    prospect: null,
-  });
 
   // 1. Validar sesión y obtener Perfil real desde public.profiles
   useEffect(() => {
@@ -213,22 +196,10 @@ export default function ClientesPage() {
     }
   };
 
-  const loadProspects = async () => {
-    try {
-      setProspects(await fetchProspects());
-    } catch (err) {
-      console.error("Error al cargar prospectos:", err);
-    }
-  };
-
   useEffect(() => {
     if (loadingAuth) return;
     (async () => {
-      await Promise.all([
-        loadClients(),
-        loadProspects(),
-        fetchProfiles().then(setProfiles).catch(() => setProfiles([])),
-      ]);
+      await loadClients();
       setLoading(false);
     })();
   }, [loadingAuth]);
@@ -243,29 +214,6 @@ export default function ClientesPage() {
   const handleTogglePause = async (client: Client) => {
     await setClientPaused(client.id, !client.paused);
     await loadClients();
-  };
-
-  const handleSaveProspect = async (input: ProspectInput, id?: string) => {
-    if (id) await updateProspect(id, input);
-    else await createProspect(input);
-    await loadProspects();
-  };
-
-  const handleMoveStage = async (prospect: Prospect, stage: ProspectStage) => {
-    setProspects((prev) => prev.map((p) => (p.id === prospect.id ? { ...p, stage } : p)));
-    try {
-      await updateProspect(prospect.id, { stage });
-    } catch (err) {
-      console.error("Error al mover prospecto:", err);
-      await loadProspects();
-    }
-  };
-
-  const handleConvertProspect = async (prospect: Prospect, packageValue: PackageValue) => {
-    const created = await createClientWithPackage(prospect.name, packageValue);
-    await updateProspect(prospect.id, { converted_client_id: created.id, stage: "ganado" });
-    setSuccessMsg(`Prospecto "${prospect.name}" convertido en cliente.`);
-    await Promise.all([loadClients(), loadProspects()]);
   };
 
   const activeClients = clients.filter((c) => !c.paused);
@@ -305,7 +253,7 @@ export default function ClientesPage() {
                 Clientes
               </h1>
             </div>
-            {tab === "clientes" && (
+            {(
               <div className="flex gap-2">
                 <button
                   onClick={() => setIsPaymentsOpen(true)}
@@ -323,32 +271,10 @@ export default function ClientesPage() {
             )}
           </div>
 
-          <div className="flex gap-1 border-b border-line">
-            {(["clientes", "prospectos"] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`-mb-px border-b-2 px-4 py-2 text-xs font-semibold capitalize transition ${
-                  tab === t ? "border-brand text-text" : "border-transparent text-muted hover:text-text"
-                }`}
-              >
-                {t === "clientes" ? `Clientes (${activeClients.length})` : `Prospectos (${prospects.length})`}
-              </button>
-            ))}
-          </div>
-
           {successMsg && <p className="text-xs text-emerald-600">{successMsg}</p>}
 
           {loading ? (
             <div className="text-xs text-muted p-4">Cargando clientes...</div>
-          ) : tab === "prospectos" ? (
-            <ProspectsBoard
-              prospects={prospects}
-              profiles={profiles}
-              onOpen={(p) => setProspectModal({ open: true, prospect: p })}
-              onNew={() => setProspectModal({ open: true, prospect: null })}
-              onMoveStage={handleMoveStage}
-            />
           ) : (
             <div className="overflow-hidden rounded-2xl border border-line bg-panel shadow-sm">
               <div className="overflow-x-auto">
@@ -421,18 +347,6 @@ export default function ClientesPage() {
         isOpen={isPaymentsOpen}
         onClose={() => setIsPaymentsOpen(false)}
         clients={clients}
-      />
-      <ProspectModal
-        isOpen={prospectModal.open}
-        prospect={prospectModal.prospect}
-        profiles={profiles}
-        onClose={() => setProspectModal({ open: false, prospect: null })}
-        onSave={handleSaveProspect}
-        onDelete={async (id) => {
-          await deleteProspect(id);
-          await loadProspects();
-        }}
-        onConvert={handleConvertProspect}
       />
     </div>
   );

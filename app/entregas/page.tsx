@@ -570,11 +570,14 @@ export default function DeliveriesPage() {
   }, [clientFilteredPieces, monthStartISO, monthEndISO]);
 
   // Piezas sin ninguna fecha (ni de entrega/publicación manual, ni de evento de
-  // grabación ligado): no tienen de dónde ubicarse en ningún mes, así que se muestran
-  // aparte para poder abrirlas y al menos asignarles una fecha a mano.
+  // grabación ligado): se muestran aparte para poder asignarles una fecha a mano, pero
+  // solo las del mes seleccionado (piece.month). Si no hay ninguna, el bloque se oculta.
   const unscheduledPieces = useMemo(() => {
-    return clientFilteredPieces.filter((p) => p.status !== "publicado" && !pieceDate(p));
-  }, [clientFilteredPieces]);
+    const selectedMonth = month.getMonth() + 1;
+    return clientFilteredPieces.filter(
+      (p) => p.status !== "publicado" && !pieceDate(p) && p.month === selectedMonth
+    );
+  }, [clientFilteredPieces, month]);
 
   // Tabla maestra: piezas de todos los clientes del mes seleccionado (mismo mes que
   // navega el kanban), agrupadas en una tabla separada por cliente. Se filtra por
