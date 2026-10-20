@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LuMail, LuPlus, LuTrash2 } from "react-icons/lu";
+import { isAdminRole, useEffectiveRole } from "@/lib/roleView";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
 import TeamMemberModal from "@/components/TeamMemberModal";
@@ -15,6 +16,7 @@ export default function EquipoPage() {
   const supabase = createClient();
 
   const [currentUser, setCurrentUser] = useState<Profile | null>(null);
+  const role = useEffectiveRole(currentUser?.role);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [team, setTeam] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -94,11 +96,11 @@ export default function EquipoPage() {
     );
   }
 
-  const isAdmin = currentUser.role === "admin";
+  const isAdmin = isAdminRole(role);
 
   return (
     <div className="flex h-screen text-text">
-      <Sidebar />
+      <Sidebar role={currentUser.role} />
       <div className="flex flex-1 flex-col overflow-y-auto bg-ink">
         <TopBar profile={currentUser} onLogout={handleLogout} />
 

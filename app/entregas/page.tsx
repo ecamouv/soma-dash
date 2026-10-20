@@ -17,7 +17,7 @@ import {
   nextCodeNumbers,
   buildPieceCode,
 } from "@/lib/deliveries";
-import { defaultClientColor, hexToRgba } from "@/lib/clientColors";
+import { buildClientColorMap, defaultClientColor, hexToRgba } from "@/lib/clientColors";
 
 // Entregas cubre las etapas de producción, de "por_grabar" a "aprobado".
 // "publicado" se marca desde la página de Publicaciones y no vive aquí.
@@ -239,6 +239,16 @@ const PIECES_TABLE_MAX_HEIGHT = "18.5rem";
 // color por cliente (esa se queda solo en el kanban, ver CLIENT_COLOR_PALETTE). Acá
 // la identidad se construye con tipografía (h1 grande y condensada), stroke, sombra
 // y gradiente en vez de tono, para diferenciarse del resto del dashboard.
+// Solo visual: fondo blanco suave si la pieza es para hoy, tinte crimson si ya se pasó la fecha.
+function dueHighlight(piece: ContentPiece): string {
+  if (!piece.due_date || piece.status === "publicado") return "";
+  const t = new Date();
+  const today = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+  if (piece.due_date < today) return "!border-[rgb(255_77_109/0.5)] !bg-[rgb(255_77_109/0.12)]";
+  if (piece.due_date === today) return "!border-white/[0.5] !bg-white/[0.15]";
+  return "";
+}
+
 function ClientPieceTable({
   group,
   color,
@@ -387,6 +397,8 @@ export default function DeliveriesPage() {
 
   const [pieces, setPieces] = useState<ContentPiece[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  // Lista completa (con pausados) solo para calcular colores igual que en Clientes.
+  const [allClients, setAllClients] = useState<Client[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>("all");
   const [month, setMonth] = useState<Date>(() => startOfMonth(new Date()));
   const [loading, setLoading] = useState(true);
@@ -538,6 +550,7 @@ export default function DeliveriesPage() {
       setPieces((piecesRes.data as ContentPiece[]).filter((p) => !p.client?.paused));
     }
     if (clientsRes.data) {
+      setAllClients(clientsRes.data as Client[]);
       setClients((clientsRes.data as Client[]).filter((c) => !c.paused));
     }
     setLoading(false);
@@ -605,13 +618,7 @@ export default function DeliveriesPage() {
   // automática por índice. Se calcula sobre `clients` (orden alfabético estable) y
   // no sobre piecesByClient, que ahora varía con el mes: si saliera de ahí, un
   // cliente podría cambiar de color entre meses según quién más tenga piezas ese mes.
-  const clientColorMap = useMemo(() => {
-    const map = new Map<string, string>();
-    clients.forEach((c, i) => {
-      map.set(c.id, c.color || defaultClientColor(i));
-    });
-    return map;
-  }, [clients]);
+  const clientColorMap = useMemo(() => buildClientColorMap(allClients), [allClients]);
 
   // Piezas por columna, ordenadas por fecha de entrega -- de más cercana a más
   // distante, y las que no tienen fecha van al final. Se recalcula automáticamente
@@ -732,7 +739,7 @@ export default function DeliveriesPage() {
 
   return (
     <div className="flex h-screen text-text">
-      <Sidebar />
+      <Sidebar role={currentUser.role} />
       <div className="flex flex-1 flex-col overflow-y-auto bg-ink">
         <TopBar profile={currentUser} onLogout={handleLogout} />
 
@@ -991,7 +998,7 @@ export default function DeliveriesPage() {
                                   }}
                                   className={`group relative min-w-0 w-full overflow-hidden rounded-lg border border-line bg-panel2 p-2 space-y-1 shadow-sm cursor-grab active:cursor-grabbing hover:border-brand2/50 transition ${
                                     isDragging ? "opacity-40" : ""
-                                  }`}
+                                  } ${dueHighlight(piece)}`}
                                 >
                                   <div className="flex items-start justify-between gap-2">
                                     <span className="min-w-0 flex-1 truncate font-display text-sm font-bold text-text">

@@ -222,7 +222,7 @@ export default function AccesosPage() {
 
   return (
     <div className="flex h-screen text-text">
-      <Sidebar />
+      <Sidebar role={currentUser.role} />
       <div className="flex flex-1 flex-col overflow-y-auto bg-ink">
         <TopBar profile={currentUser} onLogout={handleLogout} />
 

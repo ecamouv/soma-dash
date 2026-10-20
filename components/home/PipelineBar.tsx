@@ -3,14 +3,14 @@
 import { useState } from "react";
 import Link from "next/link";
 import { LuArrowRight } from "react-icons/lu";
-import { pieceLabel, type ContentPiece, type PieceStatus } from "@/lib/types";
+import { PIECE_STATUS_COLOR, pieceLabel, type ContentPiece, type PieceStatus } from "@/lib/types";
 import { pieceDate } from "@/lib/weekly";
 
 const STAGES: { status: Exclude<PieceStatus, "publicado">; label: string; color: string }[] = [
-  { status: "por_grabar", label: "Por grabar", color: "var(--color-ink-muted)" },
-  { status: "en_edicion", label: "En edición", color: "var(--color-accent-sky)" },
-  { status: "revision", label: "En revisión", color: "var(--color-accent-orange)" },
-  { status: "aprobado", label: "Aprobado", color: "var(--color-accent-green)" },
+  { status: "por_grabar", label: "Por grabar", color: PIECE_STATUS_COLOR.por_grabar },
+  { status: "en_edicion", label: "En edición", color: PIECE_STATUS_COLOR.en_edicion },
+  { status: "revision", label: "En revisión", color: PIECE_STATUS_COLOR.revision },
+  { status: "aprobado", label: "Aprobado", color: PIECE_STATUS_COLOR.aprobado },
 ];
 
 const VISIBLE = 6;
@@ -90,10 +90,15 @@ export default function PipelineBar({
                 const d = pieceDate(p);
                 const late = !!d && d < todayISO;
                 return (
-                  <div key={p.id} className="flex items-center gap-2 text-xs">
-                    <span className="font-medium text-text">{pieceLabel(p)}</span>
-                    {p.client?.name && <span className="text-muted">· {p.client.name}</span>}
-                    <span className={`ml-auto ${late ? "text-accent-orange" : "text-muted"}`}>
+                  <div
+                    key={p.id}
+                    className={`-mx-2 -my-0.5 flex items-center gap-2 rounded-md px-2 py-0.5 text-xs ${
+                      late ? "bg-[rgb(255_77_109/0.14)]" : ""
+                    }`}
+                  >
+                    <span className="shrink-0 whitespace-nowrap font-medium text-text">{pieceLabel(p)}</span>
+                    {p.client?.name && <span className="min-w-0 truncate text-muted">· {p.client.name}</span>}
+                    <span className={`ml-auto shrink-0 whitespace-nowrap ${late ? "text-crimson" : "text-text"}`}>
                       {d ? shortDate(d) : "Sin fecha"}
                     </span>
                   </div>

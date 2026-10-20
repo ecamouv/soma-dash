@@ -1,10 +1,11 @@
-export type UserRole = "prod" | "admin" | "community" | "editor";
+export type UserRole = "prod" | "admin" | "community" | "editor" | "dev";
 
 export const ROLE_LABEL: Record<UserRole, string> = {
   prod: "Productor",
   admin: "Administrador",
   community: "Community Manager",
-  editor: "Editor"
+  editor: "Editor",
+  dev: "Desarrollador"
 };
 
 export type EventType = "grabacion" | "cobertura" | "junta" | "entrega" | "otro";
@@ -51,6 +52,14 @@ export interface ClientPayment {
 }
 
 export type PieceStatus = 'por_grabar' | 'en_edicion' | 'revision' | 'aprobado' | 'publicado';
+
+export const PIECE_STATUS_COLOR: Record<PieceStatus, string> = {
+  por_grabar: "var(--color-ink-muted)",
+  en_edicion: "var(--color-accent-sky)",
+  revision: "var(--color-accent-orange)",
+  aprobado: "var(--color-accent-green)",
+  publicado: "var(--color-accent-purple)",
+};
 
 export interface ContentPiece {
   id: string;

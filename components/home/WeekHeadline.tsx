@@ -61,7 +61,7 @@ export default function WeekHeadline({ recap, todayISO }: { recap: WeeklyRecap; 
   const stats = [
     { label: "Grabaciones", value: recordings, tone: "" },
     { label: "Por entregar", value: due, tone: "" },
-    ...(overdue > 0 ? [{ label: "Atrasadas", value: overdue, tone: "text-accent-orange" }] : []),
+    ...(overdue > 0 ? [{ label: "Atrasadas", value: overdue, tone: "text-crimson" }] : []),
   ];
 
   return (

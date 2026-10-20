@@ -3,6 +3,8 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
+import { ROLE_LABEL, type UserRole } from "@/lib/types";
+import { useEffectiveRole, useRoleView } from "@/lib/roleView";
 import { LuCalendar, LuPackageCheck, LuCalendarCheck, LuUsers, LuSettings, LuAlbum, LuUsersRound, LuLightbulb } from "react-icons/lu";
 
 function NavLink({
@@ -44,8 +46,10 @@ function NavLink({
   );
 }
 
-export default function Sidebar() {
+export default function Sidebar({ role }: { role?: UserRole }) {
   const pathname = usePathname();
+  const effectiveRole = useEffectiveRole(role);
+  const { viewAs, setViewAs } = useRoleView();
 
   const navItems = [
     {
@@ -91,7 +95,7 @@ export default function Sidebar() {
   ];
 
   return (
-    <aside className="flex h-screen w-64 flex-col border-r border-white/5 bg-panel/40 backdrop-blur-xl p-4 text-text">
+    <aside className="flex h-screen w-55 flex-col border-r border-white/5 bg-panel/40 backdrop-blur-xl p-4 text-text">
       {/* Logo Branding */}
       <div className="mb-8 px-2 py-3">
         <Image
@@ -106,7 +110,9 @@ export default function Sidebar() {
 
       {/* Menú de Navegación */}
       <nav className="space-y-1">
-        {navItems.map((item) => (
+        {navItems
+          .filter((item) => !(effectiveRole === "community" && item.href === "/inspiracion"))
+          .map((item) => (
           <NavLink
             key={item.href}
             href={item.href}
@@ -119,6 +125,22 @@ export default function Sidebar() {
 
       {/* Configuración: fija hasta abajo, separada del resto del menú */}
       <div className="mt-auto pt-3 border-t border-white/5">
+        {role === "dev" && (
+          <label className="mb-2 block space-y-1 px-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">Ver como</span>
+            <select
+              value={viewAs}
+              onChange={(e) => setViewAs(e.target.value as UserRole)}
+              className="w-full rounded-xl border border-line bg-panel2 px-3 py-1.5 text-xs text-text transition focus:border-brand2 focus:outline-none"
+            >
+              {(Object.keys(ROLE_LABEL) as UserRole[]).map((r) => (
+                <option key={r} value={r}>
+                  {ROLE_LABEL[r]}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <NavLink
           href="/configuracion"
           label="Configuración"

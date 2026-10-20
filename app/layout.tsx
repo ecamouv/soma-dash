@@ -1,5 +1,6 @@
 import "./globals.css";
 import { Inter } from "next/font/google";
+import { RoleViewProvider } from "@/lib/roleView";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -27,7 +28,9 @@ export default function RootLayout({
           <div className="absolute -left-32 top-0 h-[480px] w-[480px] rounded-full bg-gradient-to-br from-brand2/70 to-brand/50 blur-[80px]" />
           <div className="absolute -left-32 bottom-0 h-96 w-96 rounded-full bg-brand/50 blur-[80px]" />
         </div>
-        <div className="relative z-10">{children}</div>
+        <div className="relative z-10">
+          <RoleViewProvider>{children}</RoleViewProvider>
+        </div>
       </body>
     </html>
   )

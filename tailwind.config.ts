@@ -55,6 +55,7 @@ const config: Config = {
         "accent-purple-deep": "var(--color-accent-purple-deep)",
         "accent-pink": "var(--color-accent-pink)",
         "accent-orange": "var(--color-accent-orange)",
+        crimson: "var(--color-crimson)",
         "accent-orange-deep": "var(--color-accent-orange-deep)",
         "accent-teal": "var(--color-accent-teal)",
         "accent-green": "var(--color-accent-green)",

@@ -3,6 +3,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { LuX } from "react-icons/lu";
+import { isAdminRole, useEffectiveRole } from "@/lib/roleView";
+import { withoutDevs } from "@/lib/team";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
 import StatsBar from "@/components/StatsBar";
@@ -25,6 +27,7 @@ export default function DashboardPage() {
   const supabase = createClient();
 
   const [currentUser, setCurrentUser] = useState<Profile | null>(null);
+  const role = useEffectiveRole(currentUser?.role);
   const [teamProfiles, setTeamProfiles] = useState<Profile[]>([]);
   const [loadingAuth, setLoadingAuth] = useState(true);
 
@@ -82,7 +85,7 @@ export default function DashboardPage() {
         .order("full_name", { ascending: true });
 
       if (profilesData) {
-        setTeamProfiles(profilesData as Profile[]);
+        setTeamProfiles(withoutDevs(profilesData as Profile[]));
       }
 
       setLoadingAuth(false);
@@ -127,7 +130,7 @@ export default function DashboardPage() {
       }
 
       // Filtro por Productor / Integrante (Solo para Admin)
-      if (currentUser?.role === "admin" && selectedProducerId !== "all") {
+      if (isAdminRole(role) && selectedProducerId !== "all") {
         const isCreatedBy = event.created_by === selectedProducerId;
         const isMember = event.members?.some((m) => m.user_id === selectedProducerId);
         if (!isCreatedBy && !isMember) return false;
@@ -135,7 +138,7 @@ export default function DashboardPage() {
 
       return true;
     });
-  }, [events, selectedClientId, selectedProducerId, currentUser?.role]);
+  }, [events, selectedClientId, selectedProducerId, role]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -213,7 +216,7 @@ export default function DashboardPage() {
 
   return (
     <div className="flex h-screen text-text">
-      <Sidebar />
+      <Sidebar role={currentUser.role} />
       <div className="flex flex-1 flex-col overflow-y-auto bg-ink">
         <TopBar profile={currentUser} onLogout={handleLogout} />
 
@@ -261,7 +264,7 @@ export default function DashboardPage() {
               </select>
 
               {/* Selector de Productor / Usuario (Solo Administradores) */}
-              {currentUser.role === "admin" && (
+              {isAdminRole(role) && (
                 <select
                   value={selectedProducerId}
                   onChange={(e) => setSelectedProducerId(e.target.value)}

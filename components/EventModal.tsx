@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { LuX } from "react-icons/lu";
 import { pieceLabel, type CalendarEvent, type Client, type ContentPiece, type EventType, type Profile } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
+import { withoutDevs } from "@/lib/team";
 
 interface EventModalProps {
     isOpen: boolean;
@@ -192,7 +193,7 @@ export default function EventModal({
                     .select("*");
 
                 if (!profErr && profiles) {
-                    setTeamProfiles(profiles as Profile[]);
+                    setTeamProfiles(withoutDevs(profiles as Profile[]));
                 }
 
                 // Cargar miembros existentes asociados al evento en public.event_members

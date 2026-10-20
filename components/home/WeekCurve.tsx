@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { EVENT_TYPE_COLOR, pieceLabel } from "@/lib/types";
+import { EVENT_TYPE_COLOR, PIECE_STATUS_COLOR, pieceLabel } from "@/lib/types";
 import { pieceDate, weekDays, type WeeklyRecap } from "@/lib/weekly";
 import { weekDuePieces } from "./WeekHeadline";
 
@@ -134,7 +134,10 @@ export default function WeekCurve({ recap, todayISO }: { recap: WeeklyRecap; tod
             ))}
             {day.pieces.map((p) => (
               <li key={p.id} className="flex items-center gap-2 text-xs">
-                <span className="h-2 w-2 shrink-0 rounded-sm bg-ink-muted" />
+                <span
+                  className="h-2 w-2 shrink-0 rounded-sm"
+                  style={{ backgroundColor: PIECE_STATUS_COLOR[p.status] }}
+                />
                 <span className="font-medium text-text">{pieceLabel(p)}</span>
                 {p.client?.name && <span className="text-muted">· {p.client.name}</span>}
                 <span className="ml-auto text-muted">entrega</span>

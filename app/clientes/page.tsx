@@ -10,7 +10,7 @@ import PaymentsModal from "@/components/PaymentsModal";
 import type { Client, Profile } from "@/lib/types";
 import { createClientWithPackage, fetchClients, setClientColor, setClientPaused } from "@/lib/events";
 import { PACKAGES } from "@/lib/packages";
-import { defaultClientColor } from "@/lib/clientColors";
+import { buildClientColorMap } from "@/lib/clientColors";
 import { createClient } from "@/lib/supabase/client";
 
 function formatPrice(price?: number | null): string {
@@ -221,10 +221,9 @@ export default function ClientesPage() {
 
   // Índice estable (orden de fetchClients, por nombre) para el color por defecto en
   // el picker -- el mismo orden que usa Entregas para su paleta automática.
-  const fallbackColorFor = (clientId: string) => {
-    const i = clients.findIndex((c) => c.id === clientId);
-    return defaultClientColor(i === -1 ? 0 : i);
-  };
+  const clientColorMap = buildClientColorMap(clients);
+  const fallbackColorFor = (clientId: string) => clientColorMap.get(clientId) ?? "#91919a";
+
 
   const handleColorChange = (clientId: string, color: string) => {
     setClients((prev) => prev.map((c) => (c.id === clientId ? { ...c, color } : c)));
@@ -240,7 +239,7 @@ export default function ClientesPage() {
 
   return (
     <div className="flex h-screen text-text">
-      <Sidebar />
+      <Sidebar role={currentUser.role} />
       <div className="flex flex-1 flex-col overflow-y-auto bg-ink">
         <TopBar profile={currentUser} onLogout={handleLogout} />
 

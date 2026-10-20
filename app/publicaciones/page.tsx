@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { LuX } from "react-icons/lu";
+import { useEffectiveRole } from "@/lib/roleView";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
 import ContentPieceModal from "@/components/ContentPieceModal";
@@ -13,6 +14,7 @@ import { createClient } from "@/lib/supabase/client";
 import { updatePieceStatus, updatePieceDueDateAndName } from "@/lib/deliveries";
 
 const WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+const DAY_NAMES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 const MONTH_NAMES = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
@@ -45,10 +47,14 @@ export default function PublicacionesPage() {
   const supabase = createClient();
 
   const [currentUser, setCurrentUser] = useState<Profile | null>(null);
+  const role = useEffectiveRole(currentUser?.role);
   const [loadingAuth, setLoadingAuth] = useState(true);
 
   const [pieces, setPieces] = useState<ContentPiece[]>([]);
+  // Día seleccionado (clic en el fondo de una casilla) para la lista lateral.
+  const [selectedIso, setSelectedIso] = useState<string>(() => toISO(new Date()));
   const [clients, setClients] = useState<Client[]>([]);
+  const [allClients, setAllClients] = useState<Client[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>("all");
   const [month, setMonth] = useState<Date>(() => new Date());
   const [loading, setLoading] = useState(true);
@@ -75,6 +81,7 @@ export default function PublicacionesPage() {
       setPieces((piecesRes.data as ContentPiece[]).filter((p) => !p.client?.paused));
     }
     if (clientsRes.data) {
+      setAllClients(clientsRes.data as Client[]);
       setClients((clientsRes.data as Client[]).filter((c) => !c.paused));
     }
     setLoading(false);
@@ -161,12 +168,16 @@ export default function PublicacionesPage() {
   }, [filteredPieces]);
 
   // Clientes con paquete "Solamente Pauta"
+  // Los productores no ven clientes de pauta (ni su sección, ni sus posts en el calendario).
+  const hidePauta = role === "prod";
   const pautaClients = useMemo(
     () =>
-      clients.filter(
-        (c) => c.package === "solamente_pauta" && (selectedClientId === "all" || c.id === selectedClientId)
-      ),
-    [clients, selectedClientId]
+      hidePauta
+        ? []
+        : clients.filter(
+            (c) => c.package === "solamente_pauta" && (selectedClientId === "all" || c.id === selectedClientId)
+          ),
+    [clients, selectedClientId, hidePauta]
   );
 
   const days = useMemo(() => buildGrid(month), [month]);
@@ -184,6 +195,11 @@ export default function PublicacionesPage() {
     return map;
   }, [pautaPosts, pautaClients]);
   const todayISO = toISO(new Date());
+
+  const selectedPieces = piecesByDate.get(selectedIso) ?? [];
+  const selectedPauta = pautaByDate.get(selectedIso) ?? [];
+  const [selY, selM, selD] = selectedIso.split("-").map(Number);
+  const selectedHeader = `${DAY_NAMES[(new Date(selY, selM - 1, selD).getDay() + 6) % 7]} ${selD}`;
 
   const handleToggle = async (piece: ContentPiece, checked: boolean) => {
     const newStatus = checked ? "publicado" : "aprobado";
@@ -275,7 +291,7 @@ export default function PublicacionesPage() {
 
   return (
     <div className="flex h-screen text-text">
-      <Sidebar />
+      <Sidebar role={currentUser.role} />
       <div className="flex flex-1 flex-col overflow-y-auto bg-ink">
         <TopBar profile={currentUser} onLogout={handleLogout} />
 
@@ -338,7 +354,9 @@ export default function PublicacionesPage() {
               className="rounded-xl border border-line bg-panel2 px-3 py-1.5 text-xs text-text focus:border-brand2 focus:outline-none transition"
             >
               <option value="all">Todos los clientes</option>
-              {clients.map((c) => (
+              {clients
+                .filter((c) => !(hidePauta && c.package === "solamente_pauta"))
+                .map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
@@ -351,7 +369,8 @@ export default function PublicacionesPage() {
             <div className="text-xs text-muted p-4">Cargando publicaciones...</div>
           ) : (
             <>
-              <div className="overflow-hidden rounded-card border border-line bg-panel shadow-sm">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+              <div className="min-w-0 flex-1 overflow-hidden rounded-card border border-line bg-panel shadow-sm">
                 <div className="grid grid-cols-7 border-b border-line bg-panel2/40">
                   {WEEKDAYS.map((w) => (
                     <div
@@ -383,9 +402,14 @@ export default function PublicacionesPage() {
                           setDragOverIso((cur) => (cur === iso ? null : cur))
                         }
                         onDrop={(e) => handleDropOnDay(e, iso)}
+                        onClick={(e) => {
+                          // Solo el fondo de la casilla selecciona el día; las piezas y sus casillas no.
+                          if ((e.target as HTMLElement).closest("label, input, [draggable='true']")) return;
+                          setSelectedIso(iso);
+                        }}
                         className={[
-                          "flex min-h-[104px] max-h-[160px] flex-col gap-1 overflow-y-auto border-b border-r border-line px-1.5 py-1.5 transition",
-                          inMonth ? "bg-transparent" : "bg-ink/40",
+                          "flex min-h-[104px] max-h-[160px] cursor-pointer flex-col gap-1 overflow-y-auto border-b border-r border-line px-1.5 py-1.5 transition",
+                          iso === selectedIso ? "bg-panel2/60 ring-1 ring-inset ring-brand/60" : inMonth ? "bg-transparent" : "bg-ink/40",
                           isDragOver ? "bg-orange-500/10 ring-1 ring-inset ring-orange-500/50" : "",
                         ].join(" ")}
                       >
@@ -482,11 +506,59 @@ export default function PublicacionesPage() {
                 </div>
               </div>
 
+              {/* Lista lateral del día seleccionado: solo nombre y cliente. */}
+              <aside className="w-full shrink-0 rounded-card border border-line bg-panel p-4 shadow-sm lg:sticky lg:top-4 lg:w-64">
+                <h2 className="mb-3 font-display text-sm font-semibold text-text">{selectedHeader}</h2>
+                {selectedPieces.length === 0 && selectedPauta.length === 0 ? (
+                  <p className="text-xs text-muted">Sin publicaciones.</p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {selectedPieces.map((piece) => (
+                      <li
+                        key={piece.id}
+                        className={`rounded-lg px-2.5 py-1.5 ${
+                          piece.status === "publicado" ? "bg-emerald-500/10" : "bg-panel2/50"
+                        }`}
+                      >
+                        <p
+                          className={`break-words text-xs font-medium ${
+                            piece.status === "publicado" ? "text-emerald-300" : "text-text"
+                          }`}
+                        >
+                          {pieceLabel(piece)}
+                        </p>
+                        {piece.client?.name && (
+                          <p className="break-words text-[11px] text-muted">{piece.client.name}</p>
+                        )}
+                      </li>
+                    ))}
+                    {selectedPauta.map((post) => (
+                      <li
+                        key={post.id}
+                        className={`rounded-lg px-2.5 py-1.5 ${
+                          post.published ? "bg-emerald-500/10" : "bg-panel2/50"
+                        }`}
+                      >
+                        <p
+                          className={`break-words text-xs font-medium ${
+                            post.published ? "text-emerald-300" : "text-text"
+                          }`}
+                        >
+                          {post.name}
+                        </p>
+                        <p className="break-words text-[11px] text-muted">{post.clientName}</p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </aside>
+              </div>
+
               {/* Clientes de solo pauta: posts semanales generados por mes, debajo del calendario. */}
-              {(selectedClientId === "all" || pautaClients.length > 0) && (
+              {!hidePauta && (selectedClientId === "all" || pautaClients.length > 0) && (
                 <PautaSection
                   clients={pautaClients}
-                  allClients={clients}
+                  allClients={allClients}
                   month={month}
                   posts={pautaPosts}
                   setPosts={setPautaPosts}

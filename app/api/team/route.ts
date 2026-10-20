@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { UserRole } from "@/lib/types";
 
-const ROLES: UserRole[] = ["prod", "admin", "community", "editor"];
+const ROLES: UserRole[] = ["prod", "admin", "community", "editor", "dev"];
 
 function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -22,7 +22,7 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
   const { data: me } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (me?.role !== "admin") {
+  if (me?.role !== "admin" && me?.role !== "dev") {
     return NextResponse.json({ error: "Solo un administrador puede agregar integrantes." }, { status: 403 });
   }
 
@@ -88,7 +88,7 @@ export async function DELETE(request: Request) {
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
   const { data: me } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (me?.role !== "admin") {
+  if (me?.role !== "admin" && me?.role !== "dev") {
     return NextResponse.json({ error: "Solo un administrador puede eliminar integrantes." }, { status: 403 });
   }
 

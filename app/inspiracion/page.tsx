@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LuArrowUpRight, LuLoaderCircle, LuPencil, LuPlus, LuTrash2 } from "react-icons/lu";
+import { useEffectiveRole } from "@/lib/roleView";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
 import type { Client, Profile } from "@/lib/types";
@@ -22,6 +23,7 @@ export default function InspiracionPage() {
   const supabase = createClient();
 
   const [profile, setProfile] = useState<Profile | null>(null);
+  const role = useEffectiveRole(profile?.role);
   const [items, setItems] = useState<InspirationItem[]>([]);
   const [clients, setClients] = useState<Pick<Client, "id" | "name">[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,6 +36,11 @@ export default function InspiracionPage() {
   const [saving, setSaving] = useState(false);
   const [view, setView] = useState<"todo" | "cliente" | "sector">("todo");
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Community managers no tienen esta sección: redirige sin mostrar nada.
+  useEffect(() => {
+    if (role === "community") router.replace("/");
+  }, [role, router]);
 
   useEffect(() => {
     const init = async () => {
@@ -151,7 +158,7 @@ export default function InspiracionPage() {
     router.refresh();
   };
 
-  if (!profile) {
+  if (!profile || role === "community") {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-ink text-muted font-mono text-sm">
         Cargando sesión...
@@ -161,7 +168,7 @@ export default function InspiracionPage() {
 
   return (
     <div className="flex h-screen text-text">
-      <Sidebar />
+      <Sidebar role={profile.role} />
       <div className="flex flex-1 flex-col overflow-y-auto bg-ink">
         <TopBar profile={profile} onLogout={handleLogout} />
 

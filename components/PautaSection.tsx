@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { LuMinus, LuPlus } from "react-icons/lu";
 import type { Client } from "@/lib/types";
-import { defaultClientColor } from "@/lib/clientColors";
+import { buildClientColorMap } from "@/lib/clientColors";
 import {
   fetchPautaPosts,
   fetchPautaSettings,
@@ -93,11 +93,9 @@ export default function PautaSection({ clients, allClients, month, posts, setPos
     };
   }, [year, monthNumber, rangeStart, rangeEnd, setPosts]);
 
-  const colorOf = (clientId: string) => {
-    const client = allClients.find((c) => c.id === clientId);
-    const index = allClients.findIndex((c) => c.id === clientId);
-    return client?.color || defaultClientColor(Math.max(index, 0));
-  };
+  const colorMap = useMemo(() => buildClientColorMap(allClients), [allClients]);
+  const colorOf = (clientId: string) => colorMap.get(clientId) ?? "#91919a";
+
 
   const postsByClient = useMemo(() => {
     const map = new Map<string, PautaPost[]>();
@@ -213,7 +211,8 @@ export default function PautaSection({ clients, allClients, month, posts, setPos
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
           {clients.map((client) => {
-            const clientPosts = postsByClient.get(client.id) ?? [];
+            // Solo se muestran las semanas dentro del tope (sin semana 5).
+            const clientPosts = (postsByClient.get(client.id) ?? []).filter((p) => p.week <= weeks);
             const perWeek = settings[client.id] ?? 0;
             const busy = busyClientId === client.id;
             const missing = missingPostCount(clientPosts, perWeek, weeks);
