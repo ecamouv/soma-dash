@@ -1,205 +1,100 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { LuUsers, LuSnowflake, LuReceipt } from "react-icons/lu";
-import Sidebar from "@/components/Sidebar";
-import TopBar from "@/components/TopBar";
-import NewClientModal from "@/components/NewClientModal";
-import PauseClientModal from "@/components/PauseClientModal";
-import PaymentsModal from "@/components/PaymentsModal";
-import type { Client, Profile } from "@/lib/types";
-import { createClientWithPackage, fetchClients, setClientPaused } from "@/lib/events";
-import { createClient } from "@/lib/supabase/client";
-import { PACKAGES } from "@/lib/packages";
+import { LuChevronLeft, LuChevronRight } from "react-icons/lu";
+import WeekHeadline from "@/components/home/WeekHeadline";
+import WeekCurve from "@/components/home/WeekCurve";
+import PipelineBar from "@/components/home/PipelineBar";
+import NextWeek from "@/components/home/NextWeek";
+import { PageHeader, PageShell, SessionLoading } from "@/components/ui";
+import { fetchWeeklyRecap, weekRange, type WeeklyRecap } from "@/lib/weekly";
+import { useSession } from "@/lib/useSession";
+import { iso } from "@/lib/utils";
 
 export default function SomaHomePage() {
-  const router = useRouter();
-  const supabase = createClient();
-
-  const [currentUser, setCurrentUser] = useState<Profile | null>(null);
-  const [loadingAuth, setLoadingAuth] = useState(true);
-
-  const [clients, setClients] = useState<Client[]>([]);
-  const [isNewClientOpen, setIsNewClientOpen] = useState(false);
-  const [isPauseClientOpen, setIsPauseClientOpen] = useState(false);
-  const [isPaymentsOpen, setIsPaymentsOpen] = useState(false);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
-
-  const loadClients = async () => {
-    try {
-      setClients(await fetchClients());
-    } catch (err) {
-      console.error("Error al cargar clientes:", err);
-    }
-  };
+  const currentUser = useSession();
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [recap, setRecap] = useState<WeeklyRecap | null>(null);
+  const [loadingRecap, setLoadingRecap] = useState(true);
+  const [recapError, setRecapError] = useState<string | null>(null);
 
   useEffect(() => {
-    const checkUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        router.push("/login");
-        return;
-      }
-
-      const { data: userProfile } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .single();
-
-      setCurrentUser(
-        (userProfile as Profile) || {
-          id: user.id,
-          email: user.email || "",
-          full_name: user.email?.split("@")[0] || "Usuario",
-          role: "prod",
-          initials: (user.email || "U").substring(0, 2).toUpperCase(),
-        }
-      );
-      setLoadingAuth(false);
+    if (!currentUser) return;
+    let cancelled = false;
+    setLoadingRecap(true);
+    setRecapError(null);
+    fetchWeeklyRecap(weekRange(weekOffset))
+      .then((r) => !cancelled && setRecap(r))
+      .catch((err) => {
+        console.error("Error al cargar el resumen semanal:", err);
+        if (!cancelled) setRecapError("No se pudo cargar el resumen semanal.");
+      })
+      .finally(() => !cancelled && setLoadingRecap(false));
+    return () => {
+      cancelled = true;
     };
+  }, [currentUser, weekOffset]);
 
-    checkUser();
-  }, [router, supabase]);
+  if (!currentUser) return <SessionLoading />;
 
-  useEffect(() => {
-    if (!loadingAuth) loadClients();
-  }, [loadingAuth]);
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
-  };
-
-  if (loadingAuth || !currentUser) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-ink text-muted font-mono text-sm">
-        Cargando sesión...
-      </div>
-    );
-  }
-
-  const handleCreateClient: React.ComponentProps<typeof NewClientModal>["onCreate"] = async (input) => {
-    setSuccessMsg(null);
-    await createClientWithPackage(input.name, input.packageValue);
-    setSuccessMsg(`Cliente "${input.name}" agregado con ${PACKAGES[input.packageValue].label}.`);
-    await loadClients();
-  };
-
-  const handlePauseClient = async (clientId: string) => {
-    await setClientPaused(clientId, true);
-    await loadClients();
-  };
-
-  const handleResumeClient = async (clientId: string) => {
-    await setClientPaused(clientId, false);
-    await loadClients();
-  };
+  const range = weekRange(weekOffset);
+  const todayISO = iso(new Date());
+  const fmt = (d: string) =>
+    new Date(`${d}T00:00:00`).toLocaleDateString("es-MX", { day: "numeric", month: "short" });
 
   return (
-    <div className="flex h-screen text-text">
-      <Sidebar />
-      <div className="flex flex-1 flex-col overflow-y-auto bg-ink">
-        <TopBar profile={currentUser} onLogout={handleLogout} />
-
-        <div className="p-6 space-y-6 max-w-4xl">
-          <div>
-            <span className="text-xs text-muted">Soma</span>
-            <h1 className="text-2xl font-bold font-display bg-gradient-to-r from-text to-muted bg-clip-text text-transparent">Bienvenido a Soma</h1>
+    <PageShell profile={currentUser}>
+      <div className="p-6 space-y-6 max-w-5xl">
+        <PageHeader crumb="Soma › Resumen semanal" title="Resumen semanal">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setWeekOffset((o) => o - 1)}
+              aria-label="Semana anterior"
+              className="rounded-md border border-line p-2 text-muted hover:text-text"
+            >
+              <LuChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="min-w-40 text-center text-xs font-semibold">
+              {fmt(range.start)} - {fmt(range.end)}
+              {weekOffset === 0 ? " (esta semana)" : ""}
+            </span>
+            <button
+              onClick={() => setWeekOffset((o) => o + 1)}
+              aria-label="Semana siguiente"
+              className="rounded-md border border-line p-2 text-muted hover:text-text"
+            >
+              <LuChevronRight className="h-4 w-4" />
+            </button>
+            {weekOffset !== 0 && (
+              <button
+                onClick={() => setWeekOffset(0)}
+                className="rounded-md border border-line px-3 py-2 text-xs font-semibold text-muted hover:text-text"
+              >
+                Hoy
+              </button>
+            )}
           </div>
+        </PageHeader>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div className="overflow-hidden rounded-2xl border border-line bg-panel shadow-sm">
-              <div className="h-1 bg-gradient-to-r from-brand to-brand2" />
-              <div className="p-5 space-y-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand/20 to-brand2/20 text-brand2">
-                    <LuUsers className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-bold text-text">Clientes</h2>
-                    <p className="text-[11px] text-muted">Agrega un cliente y su paquete de contenido</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setIsNewClientOpen(true)}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-brand to-brand2 hover:brightness-110 rounded-md shadow"
-                >
-                  + Agregar Cliente
-                </button>
-                {successMsg && <p className="text-xs text-emerald-400">{successMsg}</p>}
+        {recapError && <p className="text-xs text-red-500">{recapError}</p>}
+
+        {loadingRecap || !recap ? (
+          <div className="p-4 text-xs text-muted">Cargando resumen...</div>
+        ) : (
+          <>
+            <WeekHeadline recap={recap} todayISO={todayISO} />
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+              <div className="lg:col-span-3">
+                <WeekCurve key={recap.range.start} recap={recap} todayISO={todayISO} />
+              </div>
+              <div className="lg:col-span-2">
+                <PipelineBar pieces={recap.openPieces} todayISO={todayISO} />
               </div>
             </div>
-
-            <div className="overflow-hidden rounded-2xl border border-line bg-panel shadow-sm">
-              <div className="h-1 bg-gradient-to-r from-blue-600 to-blue-400" />
-              <div className="p-5 space-y-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400">
-                    <LuSnowflake className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-bold text-text">Pausar cliente</h2>
-                    <p className="text-[11px] text-muted">Congela su logística sin borrar nada</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setIsPauseClientOpen(true)}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-blue-600 to-blue-500 hover:brightness-110 rounded-md shadow"
-                >
-                  Pausar / Reanudar
-                </button>
-              </div>
-            </div>
-
-            <div className="overflow-hidden rounded-2xl border border-line bg-panel shadow-sm">
-              <div className="h-1 bg-gradient-to-r from-emerald-600 to-emerald-400" />
-              <div className="p-5 space-y-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400">
-                    <LuReceipt className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-bold text-text">Pagos</h2>
-                    <p className="text-[11px] text-muted">Registra fechas de pago por cliente</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setIsPaymentsOpen(true)}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-emerald-600 to-emerald-500 hover:brightness-110 rounded-md shadow"
-                >
-                  + Agregar pago
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+            <NextWeek events={recap.upcoming} />
+          </>
+        )}
       </div>
-
-      <NewClientModal
-        isOpen={isNewClientOpen}
-        onClose={() => setIsNewClientOpen(false)}
-        onCreate={handleCreateClient}
-      />
-
-      <PauseClientModal
-        isOpen={isPauseClientOpen}
-        onClose={() => setIsPauseClientOpen(false)}
-        clients={clients}
-        onPause={handlePauseClient}
-        onResume={handleResumeClient}
-      />
-
-      <PaymentsModal
-        isOpen={isPaymentsOpen}
-        onClose={() => setIsPaymentsOpen(false)}
-        clients={clients}
-      />
-    </div>
+    </PageShell>
   );
 }

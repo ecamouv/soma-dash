@@ -1,51 +1,28 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
-import Sidebar from "@/components/Sidebar";
-import TopBar from "@/components/TopBar";
+import { useEffectiveRole } from "@/lib/roleView";
 import ContentPieceModal from "@/components/ContentPieceModal";
-import { pieceLabel, type ContentPiece, type Client, type Profile } from "@/lib/types";
+import PautaSection from "@/components/PautaSection";
+import { updatePautaPost, type PautaPost } from "@/lib/pauta";
+import { ErrorBanner, MonthNav, PageHeader, PageShell, SessionLoading } from "@/components/ui";
+import { pieceLabel, type ContentPiece, type Client } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
-import { updatePieceStatus, updatePieceDueDateAndName } from "@/lib/deliveries";
+import { updateContentPiece, deleteContentPiece } from "@/lib/deliveries";
+import { useSession } from "@/lib/useSession";
+import { MONTH_NAMES, WEEKDAYS, buildGrid, errText, groupBy, iso as toISO } from "@/lib/utils";
 
-const WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
-const MONTH_NAMES = [
-  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-];
-
-function toISO(d: Date): string {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function buildGrid(month: Date): Date[] {
-  const first = new Date(month.getFullYear(), month.getMonth(), 1);
-  const firstWeekday = (first.getDay() + 6) % 7; // 0 = lunes
-  const gridStart = new Date(first);
-  gridStart.setDate(first.getDate() - firstWeekday);
-
-  const days: Date[] = [];
-  for (let i = 0; i < 42; i++) {
-    const d = new Date(gridStart);
-    d.setDate(gridStart.getDate() + i);
-    days.push(d);
-  }
-  return days;
-}
+const DAY_NAMES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 
 export default function PublicacionesPage() {
-  const router = useRouter();
-  const supabase = createClient();
-
-  const [currentUser, setCurrentUser] = useState<Profile | null>(null);
-  const [loadingAuth, setLoadingAuth] = useState(true);
+  const currentUser = useSession();
+  const role = useEffectiveRole(currentUser?.role);
 
   const [pieces, setPieces] = useState<ContentPiece[]>([]);
+  // Día seleccionado (clic en el fondo de una casilla) para la lista lateral.
+  const [selectedIso, setSelectedIso] = useState<string>(() => toISO(new Date()));
   const [clients, setClients] = useState<Client[]>([]);
+  const [allClients, setAllClients] = useState<Client[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>("all");
   const [month, setMonth] = useState<Date>(() => new Date());
   const [loading, setLoading] = useState(true);
@@ -53,6 +30,8 @@ export default function PublicacionesPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [selectedPiece, setSelectedPiece] = useState<ContentPiece | null>(null);
   const [dragOverIso, setDragOverIso] = useState<string | null>(null);
+  // Posts de clientes de pauta, compartidos entre el calendario y la sección de pauta.
+  const [pautaPosts, setPautaPosts] = useState<PautaPost[]>([]);
 
   // Los clientes pausados se filtran por completo: ni sus piezas ni ellos mismos
   // aparecen en ningún lado de Publicaciones (calendario, alertas, selector).
@@ -61,6 +40,7 @@ export default function PublicacionesPage() {
   // que ya tienen fecha de entrega asignada (ver dayPieces más abajo).
   const loadData = async () => {
     setLoading(true);
+    const supabase = createClient();
     const [piecesRes, clientsRes] = await Promise.all([
       supabase.from("content_pieces").select("*, client:clients(*)"),
       supabase.from("clients").select("*").order("name"),
@@ -70,121 +50,113 @@ export default function PublicacionesPage() {
       setPieces((piecesRes.data as ContentPiece[]).filter((p) => !p.client?.paused));
     }
     if (clientsRes.data) {
+      setAllClients(clientsRes.data as Client[]);
       setClients((clientsRes.data as Client[]).filter((c) => !c.paused));
     }
     setLoading(false);
   };
 
-  // 1. Validar sesión y obtener Perfil real desde public.profiles
   useEffect(() => {
-    const checkUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        router.push("/login");
-        return;
-      }
-
-      const { data: userProfile } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .single();
-
-      setCurrentUser(
-        (userProfile as Profile) || {
-          id: user.id,
-          email: user.email || "",
-          full_name: user.email?.split("@")[0] || "Usuario",
-          role: "prod",
-          initials: (user.email || "U").substring(0, 2).toUpperCase(),
-        }
-      );
-      setLoadingAuth(false);
-    };
-
-    checkUser();
-  }, [router, supabase]);
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
-  };
-
-  useEffect(() => {
-    if (!loadingAuth) {
-      loadData();
-    }
-  }, [loadingAuth]);
+    if (currentUser) loadData();
+  }, [currentUser]);
 
   const filteredPieces = useMemo(() => {
     if (selectedClientId === "all") return pieces;
     return pieces.filter((p) => p.client_id === selectedClientId);
   }, [pieces, selectedClientId]);
 
-  const piecesByDate = useMemo(() => {
-    const map = new Map<string, ContentPiece[]>();
-    for (const p of filteredPieces) {
-      if (!p.due_date) continue;
-      const list = map.get(p.due_date) ?? [];
-      list.push(p);
-      map.set(p.due_date, list);
-    }
-    return map;
-  }, [filteredPieces]);
+  const piecesByDate = useMemo(
+    () => groupBy(filteredPieces.filter((p) => p.due_date), (p) => p.due_date!),
+    [filteredPieces]
+  );
 
   // Piezas aprobadas (revisadas y listas) que aún no tienen fecha de publicación
   // asignada, agrupadas por cliente -- se muestran debajo del calendario para
   // poder darles clic (elegir fecha) o arrastrarlas a un día.
   const unscheduledByClient = useMemo(() => {
     const unscheduled = filteredPieces.filter((p) => p.status === "aprobado" && !p.due_date);
-    const groups = new Map<string, { client: Client | undefined; pieces: ContentPiece[] }>();
-    for (const p of unscheduled) {
-      const key = p.client_id ?? "sin-cliente";
-      if (!groups.has(key)) groups.set(key, { client: p.client, pieces: [] });
-      groups.get(key)!.pieces.push(p);
-    }
-    for (const group of groups.values()) {
-      group.pieces.sort((a, b) => a.code.localeCompare(b.code));
-    }
-    return [...groups.values()].sort((a, b) =>
-      (a.client?.name ?? "").localeCompare(b.client?.name ?? "")
-    );
+    return [...groupBy(unscheduled, (p) => p.client_id ?? "sin-cliente").values()]
+      .map((pieces) => ({
+        client: pieces[0].client,
+        pieces: pieces.sort((a, b) => a.code.localeCompare(b.code)),
+      }))
+      .sort((a, b) => (a.client?.name ?? "").localeCompare(b.client?.name ?? ""));
   }, [filteredPieces]);
 
+  // Clientes con paquete "Solamente Pauta"
+  // Los productores no ven clientes de pauta (ni su sección, ni sus posts en el calendario).
+  const hidePauta = role === "prod";
+  const pautaClients = useMemo(
+    () =>
+      hidePauta
+        ? []
+        : clients.filter(
+            (c) => c.package === "solamente_pauta" && (selectedClientId === "all" || c.id === selectedClientId)
+          ),
+    [clients, selectedClientId, hidePauta]
+  );
+
   const days = useMemo(() => buildGrid(month), [month]);
+
+  const pautaByDate = useMemo(() => {
+    const allowed = new Map(pautaClients.map((c) => [c.id, c.name]));
+    const visible = pautaPosts
+      .filter((p) => allowed.has(p.client_id) && p.scheduled_date)
+      .map((p) => ({ ...p, clientName: allowed.get(p.client_id)! }));
+    return groupBy(visible, (p) => p.scheduled_date!);
+  }, [pautaPosts, pautaClients]);
   const todayISO = toISO(new Date());
+
+  const selectedPieces = piecesByDate.get(selectedIso) ?? [];
+  const selectedPauta = pautaByDate.get(selectedIso) ?? [];
+  const [selY, selM, selD] = selectedIso.split("-").map(Number);
+  const selectedHeader = `${DAY_NAMES[(new Date(selY, selM - 1, selD).getDay() + 6) % 7]} ${selD}`;
 
   const handleToggle = async (piece: ContentPiece, checked: boolean) => {
     const newStatus = checked ? "publicado" : "aprobado";
     setSavingId(piece.id);
     setErrorMsg(null);
     try {
-      await updatePieceStatus(piece.id, newStatus);
+      await updateContentPiece({ pieceId: piece.id, status: newStatus });
       setPieces((prev) =>
         prev.map((p) => (p.id === piece.id ? { ...p, status: newStatus } : p))
       );
     } catch (err) {
       console.error("Error al actualizar publicación:", err);
       setErrorMsg(
-        `No se pudo actualizar ${pieceLabel(piece)}: ${err instanceof Error ? err.message : String(err)}`
+        `No se pudo actualizar ${pieceLabel(piece)}: ${errText(err)}`
       );
     } finally {
       setSavingId(null);
     }
   };
 
+  const handlePautaToggle = async (post: PautaPost, checked: boolean) => {
+    setSavingId(post.id);
+    setErrorMsg(null);
+    try {
+      await updatePautaPost(post.id, { published: checked });
+      setPautaPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, published: checked } : p)));
+    } catch (err) {
+      console.error("Error al actualizar post de pauta:", err);
+      setErrorMsg(
+        `No se pudo actualizar ${post.name}: ${errText(err)}`
+      );
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  // Reagendar (drag-and-drop a otro día) cambia exclusivamente la fecha de entrega --
+  // a diferencia del modal de edición, aquí no hay un selector de "mes al que
+  // pertenece" de por medio, así que el mes se recalcula automáticamente a partir
+  // de la nueva fecha en vez de conservar el mes anterior.
   const handleAssignDueDate = async (pieceId: string, dueDate: string | null) => {
     const piece = pieces.find((p) => p.id === pieceId);
-    return handleSavePiece(
-      pieceId,
-      dueDate,
-      piece?.display_name ?? null,
-      piece?.month ?? new Date().getMonth() + 1
-    );
+    const month = dueDate
+      ? Number(dueDate.slice(5, 7))
+      : piece?.month ?? new Date().getMonth() + 1;
+    return handleSavePiece(pieceId, dueDate, piece?.display_name ?? null, month);
   };
 
   const handleSavePiece = async (
@@ -195,7 +167,7 @@ export default function PublicacionesPage() {
   ) => {
     setErrorMsg(null);
     try {
-      await updatePieceDueDateAndName(pieceId, dueDate, displayName, month);
+      await updateContentPiece({ pieceId, dueDate, displayName, month });
       setPieces((prev) =>
         prev.map((p) =>
           p.id === pieceId ? { ...p, due_date: dueDate, display_name: displayName, month } : p
@@ -204,8 +176,20 @@ export default function PublicacionesPage() {
     } catch (err) {
       console.error("Error al guardar la pieza:", err);
       setErrorMsg(
-        `No se pudo guardar la pieza: ${err instanceof Error ? err.message : String(err)}`
+        `No se pudo guardar la pieza: ${errText(err)}`
       );
+    }
+  };
+
+  const handleDeletePiece = async (pieceId: string) => {
+    setErrorMsg(null);
+    try {
+      await deleteContentPiece(pieceId);
+      setPieces((prev) => prev.filter((p) => p.id !== pieceId));
+    } catch (err) {
+      console.error("Error al borrar la pieza:", err);
+      setErrorMsg(`No se pudo borrar la pieza: ${errText(err)}`);
+      throw err;
     }
   };
 
@@ -216,75 +200,27 @@ export default function PublicacionesPage() {
     if (pieceId) handleAssignDueDate(pieceId, iso);
   };
 
-  function changeMonth(delta: number) {
-    setMonth((m) => new Date(m.getFullYear(), m.getMonth() + delta, 1));
-  }
-
-  if (loadingAuth || !currentUser) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-ink text-muted font-mono text-sm">
-        Cargando sesión...
-      </div>
-    );
-  }
+  if (!currentUser) return <SessionLoading />;
 
   return (
-    <div className="flex h-screen text-text">
-      <Sidebar />
-      <div className="flex flex-1 flex-col overflow-y-auto bg-ink">
-        <TopBar profile={currentUser} onLogout={handleLogout} />
-
+    <PageShell profile={currentUser}>
         <div className="p-6 space-y-6">
-          {/* Header */}
-          <div>
-            <span className="text-xs text-muted">Operación › Publicaciones</span>
-            <h1 className="text-2xl font-bold font-display bg-gradient-to-r from-text to-muted bg-clip-text text-transparent">Publicaciones</h1>
-          </div>
+          <PageHeader crumb="Operación › Publicaciones" title="Publicaciones" />
 
           {/* Nota explicativa del checkmark */}
           <div className="rounded-xl border border-line bg-panel2/50 px-4 py-2.5 text-[11px] text-muted">
             Si una pieza tiene <span className="font-semibold text-emerald-400">✓ checkmark</span>, ha sido programado.
           </div>
 
-          {errorMsg && (
-            <div className="flex items-start justify-between gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-300">
-              <span>{errorMsg}</span>
-              <button
-                onClick={() => setErrorMsg(null)}
-                className="shrink-0 text-red-300 hover:text-red-100"
-              >
-                ✕
-              </button>
-            </div>
-          )}
+          <ErrorBanner message={errorMsg} onClose={() => setErrorMsg(null)} />
 
           {/* Filtros: mes y cliente */}
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-panel px-4 py-3 shadow-sm">
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => setMonth(new Date())}
-                className="rounded-md border border-line px-3 py-1.5 text-xs text-muted hover:text-text hover:bg-panel2"
-              >
-                Hoy
-              </button>
-              <button
-                onClick={() => changeMonth(-1)}
-                aria-label="Mes anterior"
-                className="rounded-md border border-line px-2.5 py-1.5 text-sm text-muted hover:text-text hover:bg-panel2"
-              >
-                ‹
-              </button>
-              <button
-                onClick={() => changeMonth(1)}
-                aria-label="Mes siguiente"
-                className="rounded-md border border-line px-2.5 py-1.5 text-sm text-muted hover:text-text hover:bg-panel2"
-              >
-                ›
-              </button>
-              <span className="ml-2 font-display text-sm font-semibold text-text">
-                {MONTH_NAMES[month.getMonth()]} {month.getFullYear()}
-              </span>
-            </div>
+            <MonthNav
+              month={month}
+              onChange={setMonth}
+              label={`${MONTH_NAMES[month.getMonth()]} ${month.getFullYear()}`}
+            />
 
             <select
               value={selectedClientId}
@@ -292,7 +228,9 @@ export default function PublicacionesPage() {
               className="rounded-xl border border-line bg-panel2 px-3 py-1.5 text-xs text-text focus:border-brand2 focus:outline-none transition"
             >
               <option value="all">Todos los clientes</option>
-              {clients.map((c) => (
+              {clients
+                .filter((c) => !(hidePauta && c.package === "solamente_pauta"))
+                .map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
@@ -305,7 +243,8 @@ export default function PublicacionesPage() {
             <div className="text-xs text-muted p-4">Cargando publicaciones...</div>
           ) : (
             <>
-              <div className="overflow-hidden rounded-card border border-line bg-panel shadow-sm">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+              <div className="min-w-0 flex-1 overflow-hidden rounded-card border border-line bg-panel shadow-sm">
                 <div className="grid grid-cols-7 border-b border-line bg-panel2/40">
                   {WEEKDAYS.map((w) => (
                     <div
@@ -323,6 +262,7 @@ export default function PublicacionesPage() {
                     const inMonth = d.getMonth() === month.getMonth();
                     const isToday = iso === todayISO;
                     const dayPieces = piecesByDate.get(iso) ?? [];
+                    const dayPauta = pautaByDate.get(iso) ?? [];
                     const isDragOver = dragOverIso === iso;
 
                     return (
@@ -336,9 +276,14 @@ export default function PublicacionesPage() {
                           setDragOverIso((cur) => (cur === iso ? null : cur))
                         }
                         onDrop={(e) => handleDropOnDay(e, iso)}
+                        onClick={(e) => {
+                          // Solo el fondo de la casilla selecciona el día; las piezas y sus casillas no.
+                          if ((e.target as HTMLElement).closest("label, input, [draggable='true']")) return;
+                          setSelectedIso(iso);
+                        }}
                         className={[
-                          "flex min-h-[104px] max-h-[160px] flex-col gap-1 overflow-y-auto border-b border-r border-line px-1.5 py-1.5 transition",
-                          inMonth ? "bg-transparent" : "bg-black/20",
+                          "flex min-h-[104px] max-h-[160px] cursor-pointer flex-col gap-1 overflow-y-auto border-b border-r border-line px-1.5 py-1.5 transition",
+                          iso === selectedIso ? "bg-panel2/60 ring-1 ring-inset ring-brand/60" : inMonth ? "bg-transparent" : "bg-ink/40",
                           isDragOver ? "bg-orange-500/10 ring-1 ring-inset ring-orange-500/50" : "",
                         ].join(" ")}
                       >
@@ -346,7 +291,7 @@ export default function PublicacionesPage() {
                           className={[
                             "mb-0.5 inline-flex h-5 w-5 items-center justify-center self-start rounded-full text-[11px]",
                             isToday
-                              ? "bg-brand text-white font-semibold"
+                              ? "bg-brand text-on-primary font-semibold"
                               : inMonth
                               ? "text-text"
                               : "text-muted/40",
@@ -388,7 +333,7 @@ export default function PublicacionesPage() {
                                   ? "bg-emerald-500/10 text-emerald-300 cursor-pointer"
                                   : isSelectable
                                   ? "bg-teal-500/10 text-teal-300 cursor-grab active:cursor-grabbing"
-                                  : "bg-white/[0.02] text-muted/30 cursor-grab active:cursor-grabbing"
+                                  : "bg-panel2/50 text-muted/30 cursor-grab active:cursor-grabbing"
                               }`}
                             >
                               {isSelectable && (
@@ -407,11 +352,97 @@ export default function PublicacionesPage() {
                             </Wrapper>
                           );
                         })}
+
+                        {dayPauta.map((post) => (
+                          <label
+                            key={post.id}
+                            title="Post de pauta"
+                            className={`flex items-center gap-1.5 rounded px-1 py-0.5 text-[10px] leading-tight cursor-pointer ${
+                              post.published
+                                ? "bg-emerald-500/10 text-emerald-300"
+                                : "bg-teal-500/10 text-teal-300"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={post.published}
+                              disabled={savingId === post.id}
+                              onChange={(e) => handlePautaToggle(post, e.target.checked)}
+                              className="h-3 w-3 accent-emerald-500"
+                            />
+                            <span className="font-mono truncate">{post.name}</span>
+                            <span className="truncate opacity-70">{post.clientName}</span>
+                          </label>
+                        ))}
                       </div>
                     );
                   })}
                 </div>
               </div>
+
+              {/* Lista lateral del día seleccionado: solo nombre y cliente. */}
+              <aside className="w-full shrink-0 rounded-card border border-line bg-panel p-4 shadow-sm lg:sticky lg:top-4 lg:w-64">
+                <h2 className="mb-3 font-display text-sm font-semibold text-text">{selectedHeader}</h2>
+                {selectedPieces.length === 0 && selectedPauta.length === 0 ? (
+                  <p className="text-xs text-muted">Sin publicaciones.</p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {selectedPieces.map((piece) => (
+                      <li
+                        key={piece.id}
+                        className={`rounded-lg px-2.5 py-1.5 ${
+                          piece.status === "publicado" ? "bg-emerald-500/10" : "bg-panel2/50"
+                        }`}
+                      >
+                        <button type="button" onClick={() => setSelectedPiece(piece)} className="w-full text-left">
+                          <p
+                            className={`break-words text-xs font-medium ${
+                              piece.status === "publicado" ? "text-emerald-300" : "text-text"
+                            }`}
+                          >
+                            {pieceLabel(piece)}
+                          </p>
+                          {piece.client?.name && (
+                            <p className="break-words text-[11px] text-muted">{piece.client.name}</p>
+                          )}
+                        </button>
+                      </li>
+                    ))}
+                    {selectedPauta.map((post) => (
+                      <li
+                        key={post.id}
+                        className={`rounded-lg px-2.5 py-1.5 ${
+                          post.published ? "bg-emerald-500/10" : "bg-panel2/50"
+                        }`}
+                      >
+                        <p
+                          className={`break-words text-xs font-medium ${
+                            post.published ? "text-emerald-300" : "text-text"
+                          }`}
+                        >
+                          {post.name}
+                        </p>
+                        <p className="break-words text-[11px] text-muted">{post.clientName}</p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </aside>
+              </div>
+
+              {/* Clientes de solo pauta: posts semanales generados por mes, debajo del calendario. */}
+              {!hidePauta && (selectedClientId === "all" || pautaClients.length > 0) && (
+                <PautaSection
+                  clients={pautaClients}
+                  allClients={allClients}
+                  month={month}
+                  posts={pautaPosts}
+                  setPosts={setPautaPosts}
+                  rangeStart={toISO(days[0])}
+                  rangeEnd={toISO(days[days.length - 1])}
+                  onError={setErrorMsg}
+                />
+              )}
 
               {/* Aprobadas sin fecha de publicación: debajo del calendario, por cliente.
                   Clic para elegir fecha, o arrastrar directo a un día del calendario. */}
@@ -456,14 +487,14 @@ export default function PublicacionesPage() {
             </>
           )}
         </div>
-      </div>
 
       <ContentPieceModal
         isOpen={!!selectedPiece}
         onClose={() => setSelectedPiece(null)}
         piece={selectedPiece}
         onSave={handleSavePiece}
+        onDelete={handleDeletePiece}
       />
-    </div>
+    </PageShell>
   );
 }

@@ -17,6 +17,20 @@ export function defaultClientColor(index: number): string {
   return DEFAULT_CLIENT_COLORS[index % DEFAULT_CLIENT_COLORS.length];
 }
 
+/**
+ * Fuente única del color de cada cliente (id -> hex): el asignado a mano en Clientes
+ * (client.color) o, si no hay, la paleta automática por índice. `allClients` debe ser
+ * la lista COMPLETA (incluidos pausados) ordenada por nombre; si cada página filtra
+ * distinto, los índices se corren y el mismo cliente termina con colores distintos.
+ */
+export function buildClientColorMap(
+  allClients: { id: string; color?: string | null }[]
+): Map<string, string> {
+  const map = new Map<string, string>();
+  allClients.forEach((c, i) => map.set(c.id, c.color || defaultClientColor(i)));
+  return map;
+}
+
 /** Hex (#rgb o #rrggbb) a rgba() con el alpha dado. Si el hex es inválido, cae a blanco. */
 export function hexToRgba(hex: string, alpha: number): string {
   let clean = hex.replace("#", "").trim();

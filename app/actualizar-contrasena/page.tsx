@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
+import AuthCard from "@/components/AuthCard";
 import { LuTriangleAlert, LuLoaderCircle } from "react-icons/lu";
 import { createClient } from "@/lib/supabase/client";
 import PasswordChangeForm from "@/components/PasswordChangeForm";
@@ -32,7 +32,13 @@ export default function ActualizarContrasenaPage() {
       return;
     }
 
+    // Links de invitación (Equipo > Agregar integrante) llegan con type=invite y
+    // Supabase los resuelve como SIGNED_IN, no como PASSWORD_RECOVERY.
+    const isInvite =
+      queryParams.get("type") === "invite" || hashParams.get("type") === "invite";
+
     const hasRecoveryParams =
+      isInvite ||
       queryParams.has("code") ||
       hashParams.has("access_token") ||
       queryParams.get("type") === "recovery" ||
@@ -46,8 +52,18 @@ export default function ActualizarContrasenaPage() {
     // Supabase detecta el código/token en la URL al inicializar el cliente y, si es
     // válido, emite este evento con la sesión temporal de recovery ya lista.
     const { data: subscription } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "PASSWORD_RECOVERY") setStatus("ready");
+      if (event === "PASSWORD_RECOVERY" || (isInvite && event === "SIGNED_IN")) {
+        setStatus("ready");
+      }
     });
+
+    // Si el cliente ya procesó el link antes de suscribirnos, el evento no se repite:
+    // para invitaciones basta con que la sesión ya exista.
+    if (isInvite) {
+      supabase.auth.getSession().then(({ data }) => {
+        if (data.session) setStatus("ready");
+      });
+    }
 
     // Si el código ya expiró o es inválido, Supabase no emite el evento -- después
     // de un momento razonable para el intercambio de red, lo tratamos como inválido.
@@ -67,30 +83,7 @@ export default function ActualizarContrasenaPage() {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-ink p-4">
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-60">
-        <Image
-          src="/SOMA-Logo.jpeg"
-          alt=""
-          width={900}
-          height={900}
-          className="h-[90vh] w-[90vh] max-w-none object-contain blur-2xl"
-          priority
-        />
-      </div>
-
-      <div className="relative z-10 w-full max-w-md rounded-2xl border border-line bg-panel p-8 shadow-2xl">
-        <div className="flex flex-col items-center justify-center mb-6">
-          <Image
-            src="/SOMA-Corner.png"
-            alt="SOMA Logo"
-            width={140}
-            height={243}
-            className="h-20 w-auto object-contain mb-2"
-            priority
-          />
-        </div>
-
+    <AuthCard>
         {status === "checking" && (
           <div className="flex flex-col items-center gap-3 py-6 text-muted">
             <LuLoaderCircle className="h-5 w-5 animate-spin" />
@@ -113,7 +106,7 @@ export default function ActualizarContrasenaPage() {
             <button
               type="button"
               onClick={() => router.push("/login")}
-              className="w-full rounded-xl bg-gradient-to-r from-brand to-brand2 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:brightness-110"
+              className="w-full rounded-xl bg-gradient-to-r from-brand to-brand2 py-2.5 text-sm font-semibold text-on-primary shadow-lg transition hover:brightness-110"
             >
               Ir a iniciar sesión
             </button>
@@ -136,7 +129,6 @@ export default function ActualizarContrasenaPage() {
             />
           </div>
         )}
-      </div>
-    </div>
+    </AuthCard>
   );
 }

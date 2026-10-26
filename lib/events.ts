@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
-import type { CalendarEvent, Client, ContentPiece } from "@/lib/types";
+import type { CalendarEvent, Client } from "@/lib/types";
 import { PACKAGES, type PackageValue } from "@/lib/packages";
-import { nextCodeNumbers, buildPieceCode } from "@/lib/deliveries";
+import { buildPieceCode, errText, nextCodeNumbers } from "@/lib/utils";
 
 const supabase = createClient();
 
@@ -11,7 +11,8 @@ export async function fetchEvents(): Promise<CalendarEvent[]> {
     .select(`
       *,
       client:clients(*),
-      content_pieces(*)
+      content_pieces(*),
+      members:event_members(user_id)
     `)
     .order("event_date", { ascending: true });
 
@@ -28,103 +29,76 @@ export async function saveEventToSupabase(
   pieceCodes: string[],
   memberIds: string[] = []
 ) {
-  // 1. Construir el objeto del evento
-  const payload: any = {
-    title: eventData.title,
-    event_type: eventData.event_type,
-    event_date: eventData.event_date,
-    event_time: eventData.event_time,
-    duration_hours: eventData.duration_hours,
-    location: eventData.location,
-    notes: eventData.notes,
-    client_id: eventData.client_id,
-  };
-
-  if (eventData.id) {
-    payload.id = eventData.id;
-  }
-
-  // 2. Insertar o actualizar el evento en Supabase
+  // 1. Insertar o actualizar el evento
   const { data: savedEvent, error: eventError } = await supabase
     .from("events")
-    .upsert(payload)
+    .upsert({
+      ...(eventData.id ? { id: eventData.id } : {}),
+      title: eventData.title,
+      event_type: eventData.event_type,
+      event_date: eventData.event_date,
+      event_time: eventData.event_time,
+      duration_hours: eventData.duration_hours,
+      location: eventData.location,
+      notes: eventData.notes,
+      client_id: eventData.client_id,
+    })
     .select()
     .single();
+  if (eventError) throw eventError;
 
-  if (eventError) {
-    console.error("Error al guardar evento en Supabase:", eventError);
-    throw eventError;
-  }
-
-  // 3. Desvincular piezas que ya no pertenecen a este evento. El calendario solo
-  // maneja la asociación event_id <-> pieza; el status de producción (por_grabar,
-  // en_edicion, revision, aprobado, publicado) se mueve manualmente desde
-  // Entregas/Publicaciones y no se toca aquí.
+  // 2. Desvincular piezas que ya no pertenecen a este evento. El calendario solo
+  // maneja la asociación event_id <-> pieza; el status de producción se mueve
+  // manualmente desde Entregas/Publicaciones y no se toca aquí.
   const { error: resetError } = await supabase
     .from("content_pieces")
     .update({ event_id: null })
     .eq("event_id", savedEvent.id);
+  if (resetError) throw resetError;
 
-  if (resetError) {
-    console.error("Error al desvincular piezas anteriores:", resetError);
-  }
-
-  // 4. Vincular las piezas seleccionadas actualmente al evento (sin tocar su status).
-  // El picker ahora permite elegir piezas de meses distintos al de la fecha del evento
-  // (piezas "adelantadas"), así que el mes de cada una se calcula por separado -- ya no
-  // se puede asumir que todas comparten el mes de la primera. Tampoco se toca el mes de
-  // una pieza que YA existe en la base: pudo haberse editado a mano (ver ContentPieceModal)
-  // y no debe resetearse cada vez que el evento se vuelve a guardar.
-  const { data: existingRows } = await supabase
+  // 3. Vincular las piezas seleccionadas (sin tocar su status). El picker permite
+  // piezas de meses distintos al del evento ("adelantadas"), así que el mes de cada
+  // una sale de su code. Tampoco se toca el mes de una pieza que YA existe: pudo
+  // haberse editado a mano (ver ContentPieceModal).
+  const { data: existingRows, error: existingError } = await supabase
     .from("content_pieces")
     .select("code")
     .eq("client_id", eventData.client_id)
     .in("code", pieceCodes);
+  if (existingError) throw existingError;
   const alreadyExists = new Set((existingRows ?? []).map((r) => r.code));
 
   for (const code of pieceCodes) {
-    if (alreadyExists.has(code)) {
-      await supabase
-        .from("content_pieces")
-        .update({ event_id: savedEvent.id })
-        .eq("client_id", eventData.client_id)
-        .eq("code", code);
-    } else {
-      const monthNum = Number(code.split(".")[0]);
-      await supabase.from("content_pieces").insert({
-        client_id: eventData.client_id,
-        event_id: savedEvent.id,
-        code: code,
-        type: code.includes(".v.") ? "v" : "f",
-        month: monthNum,
-      });
-    }
+    const { error } = alreadyExists.has(code)
+      ? await supabase
+          .from("content_pieces")
+          .update({ event_id: savedEvent.id })
+          .eq("client_id", eventData.client_id)
+          .eq("code", code)
+      : await supabase.from("content_pieces").insert({
+          client_id: eventData.client_id,
+          event_id: savedEvent.id,
+          code,
+          type: code.includes(".v.") ? "v" : "f",
+          month: Number(code.split(".")[0]),
+        });
+    if (error) throw error;
   }
 
-  // 5. Guardar los miembros del evento. Funciona igual para crear y editar, porque
-  // ya tenemos savedEvent.id en ambos casos. La sincronización con Google Calendar
-  // (crear/actualizar/cancelar el evento) la hace el llamador con la lista completa
-  // de miembros actual -- no solo los recién agregados, porque un cambio de día,
-  // hora o lugar también debe reflejarse aunque los miembros no cambien.
+  // 4. Guardar los miembros. La sincronización con Google Calendar la hace el
+  // llamador con la lista completa de miembros (un cambio de día/hora/lugar también
+  // debe notificarse aunque los miembros no cambien).
   const { error: membersDeleteError } = await supabase
     .from("event_members")
     .delete()
     .eq("event_id", savedEvent.id);
-  if (membersDeleteError) {
-    console.error("Error al limpiar miembros anteriores:", membersDeleteError);
-  }
+  if (membersDeleteError) throw membersDeleteError;
 
   if (memberIds.length > 0) {
     const { error: membersInsertError } = await supabase.from("event_members").insert(
-      memberIds.map((user_id) => ({
-        event_id: savedEvent.id,
-        user_id,
-        invite_status: "pendiente",
-      }))
+      memberIds.map((user_id) => ({ event_id: savedEvent.id, user_id, invite_status: "pendiente" }))
     );
-    if (membersInsertError) {
-      console.error("Error al guardar miembros del evento:", membersInsertError);
-    }
+    if (membersInsertError) throw membersInsertError;
   }
 
   return savedEvent;
@@ -132,38 +106,34 @@ export async function saveEventToSupabase(
 
 /**
  * Eliminar un evento y desvincular sus piezas (solo event_id -> null).
- * El status de producción no se toca: se mueve manualmente desde Entregas/Publicaciones.
- * Cancela primero el evento de Google Calendar ligado (si existe) -- por eso el
- * orden importa: hay que leer google_event_id antes de borrar la fila.
+ * Cancela primero el evento de Google Calendar ligado (si existe) -- el orden importa:
+ * hay que leer google_event_id antes de borrar la fila. Si Google falla no bloquea el
+ * borrado (se reporta al llamador); si Supabase falla, se lanza el error.
  */
 export async function deleteEventFromSupabase(
   eventId: string
 ): Promise<{ googleSyncError?: string }> {
-  // 1. Cancelar el evento de Google Calendar ligado, si existe. No bloquea el
-  // borrado del evento en Soma si esto falla -- solo se reporta al llamador.
   let googleSyncError: string | undefined;
   try {
     await cancelEventInvite(eventId);
   } catch (err) {
     console.error("Error cancelando invitación de Google Calendar:", err);
-    googleSyncError = err instanceof Error ? err.message : String(err);
+    googleSyncError = errText(err);
   }
 
-  // 2. Desvincular las piezas del evento antes de borrarlo
-  await supabase
+  const { error: unlinkError } = await supabase
     .from("content_pieces")
     .update({ event_id: null })
     .eq("event_id", eventId);
+  if (unlinkError) throw unlinkError;
 
-  // 3. Eliminar el evento de Supabase
   const { error } = await supabase.from("events").delete().eq("id", eventId);
-  if (error) console.error("Error al eliminar evento:", error);
+  if (error) throw error;
 
   return { googleSyncError };
 }
 
 export async function fetchClients(): Promise<Client[]> {
-  const supabase = createClient();
   const { data, error } = await supabase
     .from("clients")
     .select("id, name, package, price, paused, public_token, color")
@@ -178,34 +148,17 @@ export async function fetchClients(): Promise<Client[]> {
  * borrar nada -- reanudar lo regresa exactamente como estaba.
  */
 export async function setClientPaused(clientId: string, paused: boolean): Promise<void> {
-  const supabase = createClient();
   const { error } = await supabase.from("clients").update({ paused }).eq("id", clientId);
   if (error) throw error;
 }
 
 /**
- * Asignar el color de identidad de un cliente (hex, ej. "#60a5fa"). Se guarda desde
- * Clientes y por ahora solo se usa para pintar su franja/encabezado en Entregas.
- * `null` regresa al cliente a la paleta automática por defecto.
+ * Asignar el color de identidad de un cliente (hex, ej. "#60a5fa"). `null` regresa al
+ * cliente a la paleta automática por defecto.
  */
 export async function setClientColor(clientId: string, color: string | null): Promise<void> {
-  const supabase = createClient();
   const { error } = await supabase.from("clients").update({ color }).eq("id", clientId);
   if (error) throw error;
-}
-
-export async function createClientRecord(
-  name: string,
-  packageValue?: PackageValue | null
-): Promise<Client> {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("clients")
-    .insert({ name, package: packageValue ?? null })
-    .select("id, name, package")
-    .single();
-  if (error) throw error;
-  return data as Client;
 }
 
 /**
@@ -218,32 +171,28 @@ export async function createClientWithPackage(
   name: string,
   packageValue: PackageValue
 ): Promise<Client> {
-  const client = await createClientRecord(name, packageValue);
+  const { data, error } = await supabase
+    .from("clients")
+    .insert({ name, package: packageValue })
+    .select("id, name, package")
+    .single();
+  if (error) throw error;
+  const client = data as Client;
+
   const pkg = PACKAGES[packageValue];
   const month = new Date().getMonth() + 1;
-
-  const videoNumbers = nextCodeNumbers([], "v", month, pkg.reels);
-  const fotoNumbers = nextCodeNumbers([], "f", month, pkg.fotos);
-
-  const rows = [
-    ...videoNumbers.map((n) => ({
+  const rows = (["v", "f"] as const).flatMap((type) =>
+    nextCodeNumbers([], type, month, type === "v" ? pkg.reels : pkg.fotos).map((n) => ({
       client_id: client.id,
-      code: buildPieceCode(month, "v", n),
-      type: "v",
+      code: buildPieceCode(month, type, n),
+      type,
       month,
-    })),
-    ...fotoNumbers.map((n) => ({
-      client_id: client.id,
-      code: buildPieceCode(month, "f", n),
-      type: "f",
-      month,
-    })),
-  ];
+    }))
+  );
 
   if (rows.length > 0) {
-    const supabase = createClient();
-    const { error } = await supabase.from("content_pieces").insert(rows);
-    if (error) throw error;
+    const { error: piecesError } = await supabase.from("content_pieces").insert(rows);
+    if (piecesError) throw piecesError;
   }
 
   return client;
@@ -285,14 +234,3 @@ export async function cancelEventInvite(eventId: string): Promise<void> {
     throw new Error(data.error || `Error ${res.status} al cancelar la invitación`);
   }
 }
-
-export function parseContentPieces(raw: string): number[] {
-  return raw
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((s) => parseFloat(s))
-    .filter((n) => !Number.isNaN(n));
-}
-
-export type { ContentPiece };

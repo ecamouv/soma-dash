@@ -1,31 +1,15 @@
 "use client";
 
 import { useMemo } from "react";
+import { LuVideo, LuMapPin, LuCalendarDays, LuClapperboard } from "react-icons/lu";
 import type { CalendarEvent } from "@/lib/types";
-
-function startOfWeek(d: Date): Date {
-  const date = new Date(d);
-  const day = date.getDay(); // 0 = domingo
-  const diff = day === 0 ? -6 : 1 - day; // semana inicia en lunes
-  date.setDate(date.getDate() + diff);
-  date.setHours(0, 0, 0, 0);
-  return date;
-}
-
-function endOfWeek(d: Date): Date {
-  const start = startOfWeek(d);
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  end.setHours(23, 59, 59, 999);
-  return end;
-}
+import { weekRange } from "@/lib/weekly";
+import { iso } from "@/lib/utils";
 
 export default function StatsBar({ events }: { events: CalendarEvent[] }) {
   const stats = useMemo(() => {
-    const today = new Date();
-    const todayISO = today.toISOString().slice(0, 10);
-    const weekStart = startOfWeek(today);
-    const weekEnd = endOfWeek(today);
+    const todayISO = iso(new Date());
+    const week = weekRange();
 
     const grabaciones = events.filter((e) => e.event_type === "grabacion");
 
@@ -35,10 +19,9 @@ export default function StatsBar({ events }: { events: CalendarEvent[] }) {
       (e) => e.event_date === todayISO
     ).length;
 
-    const grabacionesSemana = grabaciones.filter((e) => {
-      const d = new Date(e.event_date + "T00:00:00");
-      return d >= weekStart && d <= weekEnd;
-    }).length;
+    const grabacionesSemana = grabaciones.filter(
+      (e) => e.event_date >= week.start && e.event_date <= week.end
+    ).length;
 
     const piezasContenido = grabaciones.reduce(
       (sum, e) => sum + e.content_pieces.length,
@@ -49,10 +32,10 @@ export default function StatsBar({ events }: { events: CalendarEvent[] }) {
   }, [events]);
 
   const cards = [
-    { label: "Total del mes", value: stats.grabacionesMes, icon: "🎥" },
-    { label: "Grabaciones hoy", value: stats.grabacionesHoy, icon: "📍" },
-    { label: "Grabaciones esta semana", value: stats.grabacionesSemana, icon: "📅" },
-    { label: "Contenido a grabar", value: stats.piezasContenido, icon: "🎬" },
+    { label: "Total del mes", value: stats.grabacionesMes, Icon: LuVideo },
+    { label: "Grabaciones hoy", value: stats.grabacionesHoy, Icon: LuMapPin },
+    { label: "Esta semana", value: stats.grabacionesSemana, Icon: LuCalendarDays },
+    { label: "Contenido a grabar", value: stats.piezasContenido, Icon: LuClapperboard },
   ];
 
   return (
@@ -60,15 +43,17 @@ export default function StatsBar({ events }: { events: CalendarEvent[] }) {
       {cards.map((c) => (
         <div
           key={c.label}
-          className="rounded-card border border-line bg-panel px-4 py-3.5"
+          className="flex items-center gap-3 rounded-card border border-line bg-panel px-4 py-3.5 shadow-sm"
         >
-          <div className="flex items-center justify-between">
-            <span className="text-[13px] text-muted">{c.label}</span>
-            <span className="text-base leading-none">{c.icon}</span>
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-panel2 text-muted">
+            <c.Icon className="h-4 w-4" strokeWidth={2} />
           </div>
-          <p className="mt-2 font-display text-2xl font-semibold text-text">
-            {c.value}
-          </p>
+          <div className="min-w-0">
+            <p className="text-eyebrow text-muted">{c.label}</p>
+            <p className="font-display text-xl font-bold tabular-nums text-text leading-tight">
+              {c.value}
+            </p>
+          </div>
         </div>
       ))}
     </div>

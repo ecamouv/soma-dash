@@ -1,5 +1,7 @@
 "use client";
 
+import { errText } from "@/lib/utils";
+import { Modal } from "@/components/ui";
 import { useState, useEffect } from "react";
 import { LuTrash2 } from "react-icons/lu";
 import type { Client, ClientPayment } from "@/lib/types";
@@ -67,7 +69,7 @@ export default function PaymentsModal({ isOpen, onClose, clients }: PaymentsModa
       setLabel("");
       await loadPayments(clientId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errText(err));
     } finally {
       setSaving(false);
     }
@@ -78,20 +80,12 @@ export default function PaymentsModal({ isOpen, onClose, clients }: PaymentsModa
       await deleteClientPayment(paymentId);
       setPayments((prev) => prev.filter((p) => p.id !== paymentId));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errText(err));
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-sm rounded-2xl border border-line bg-panel p-6 shadow-2xl text-text">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold font-display text-text">Fechas de pago</h2>
-          <button onClick={onClose} className="text-muted hover:text-text text-xl leading-none">
-            ✕
-          </button>
-        </div>
-
+    <Modal title="Fechas de pago" onClose={onClose} headerClassName="flex items-center justify-between mb-4">
         <form onSubmit={handleAdd} className="space-y-3">
           <div>
             <label className="block text-xs font-medium text-muted mb-1">Cliente</label>
@@ -171,7 +165,6 @@ export default function PaymentsModal({ isOpen, onClose, clients }: PaymentsModa
             ))
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

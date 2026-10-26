@@ -1,16 +1,17 @@
 import "./globals.css";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Inter } from "next/font/google";
+import { RoleViewProvider } from "@/lib/roleView";
 
-const jakarta = Plus_Jakarta_Sans({
+const inter = Inter({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
-  variable: "--font-jakarta",
+  variable: "--font-inter",
   display: "swap",
 });
 
 export const metadata = {
   title: 'SOMA Dashboard',
-  description: 'Panel intero para equipo SOMA',
+  description: 'Panel interno para equipo SOMA',
 }
 
 export default function RootLayout({
@@ -19,7 +20,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="es" className={`dark ${jakarta.variable}`}>
+    <html lang="es" className={`dark ${inter.variable}`}>
       <body className="relative bg-ink text-text antialiased min-h-screen">
         {/* Blobs ambientales, fijos y sin animación: le dan al glassmorphism de la
             sidebar algo real que difuminar, sin costo de repintado por frame. */}
@@ -27,7 +28,9 @@ export default function RootLayout({
           <div className="absolute -left-32 top-0 h-[480px] w-[480px] rounded-full bg-gradient-to-br from-brand2/70 to-brand/50 blur-[80px]" />
           <div className="absolute -left-32 bottom-0 h-96 w-96 rounded-full bg-brand/50 blur-[80px]" />
         </div>
-        <div className="relative z-10">{children}</div>
+        <div className="relative z-10">
+          <RoleViewProvider>{children}</RoleViewProvider>
+        </div>
       </body>
     </html>
   )
