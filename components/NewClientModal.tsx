@@ -1,7 +1,8 @@
 "use client";
 
+import { errText } from "@/lib/utils";
+import { Modal } from "@/components/ui";
 import { useState, useEffect } from "react";
-import { LuX } from "react-icons/lu";
 import { PACKAGE_LIST, type PackageValue } from "@/lib/packages";
 
 interface NewClientModalProps {
@@ -38,26 +39,14 @@ export default function NewClientModal({ isOpen, onClose, onCreate }: NewClientM
       await onCreate({ name: name.trim(), packageValue });
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errText(err));
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-sm rounded-2xl border border-line bg-panel p-6 shadow-2xl text-text">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-bold font-display text-text">Agregar cliente</h2>
-          <button
-            onClick={onClose}
-            aria-label="Cerrar"
-            className="rounded-md p-1 -m-1 text-muted hover:bg-panel2 hover:text-text"
-          >
-            <LuX className="h-5 w-5" />
-          </button>
-        </div>
-
+    <Modal title="Agregar cliente" onClose={onClose}>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-medium text-muted mb-1">
@@ -112,7 +101,6 @@ export default function NewClientModal({ isOpen, onClose, onCreate }: NewClientM
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }

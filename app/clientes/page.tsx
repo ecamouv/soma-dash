@@ -1,17 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useRef } from "react";
 import { LuLink, LuCheck, LuExternalLink, LuBookOpen, LuPlus, LuReceipt, LuSnowflake, LuPlay } from "react-icons/lu";
-import Sidebar from "@/components/Sidebar";
-import TopBar from "@/components/TopBar";
 import NewClientModal from "@/components/NewClientModal";
 import PaymentsModal from "@/components/PaymentsModal";
-import type { Client, Profile } from "@/lib/types";
+import { PageHeader, PageShell, SessionLoading } from "@/components/ui";
+import type { Client } from "@/lib/types";
 import { createClientWithPackage, fetchClients, setClientColor, setClientPaused } from "@/lib/events";
 import { PACKAGES } from "@/lib/packages";
 import { buildClientColorMap } from "@/lib/clientColors";
-import { createClient } from "@/lib/supabase/client";
+import { useSession } from "@/lib/useSession";
 
 function formatPrice(price?: number | null): string {
   if (price == null) return "—";
@@ -42,6 +40,9 @@ function ClientRow({
 }) {
   const [copied, setCopied] = useState(false);
   const [savingColor, setSavingColor] = useState(false);
+  // Color mientras se arrastra en el selector; se guarda una sola vez al cerrarlo.
+  const [draftColor, setDraftColor] = useState<string | null>(null);
+  const colorRef = useRef<HTMLInputElement>(null);
   const publicUrl = client.public_token ? `${window.location.origin}/c/${client.public_token}` : null;
 
   const handleCopy = async () => {
@@ -55,27 +56,37 @@ function ClientRow({
     }
   };
 
-  const handleColorChange = async (newColor: string) => {
-    setSavingColor(true);
-    try {
-      await setClientColor(client.id, newColor);
-      onColorChange(client.id, newColor);
-    } catch (err) {
-      console.error("Error al guardar el color del cliente:", err);
-    } finally {
-      setSavingColor(false);
-    }
-  };
+  // El "change" nativo llega una vez al cerrar el selector; el onChange de React se
+  // dispara en cada movimiento y mandaría decenas de updates que pueden llegar desordenados.
+  useEffect(() => {
+    const el = colorRef.current;
+    if (!el) return;
+    const commit = async () => {
+      setSavingColor(true);
+      try {
+        await setClientColor(client.id, el.value);
+        onColorChange(client.id, el.value);
+      } catch (err) {
+        console.error("Error al guardar el color del cliente:", err);
+      } finally {
+        setDraftColor(null);
+        setSavingColor(false);
+      }
+    };
+    el.addEventListener("change", commit);
+    return () => el.removeEventListener("change", commit);
+  });
 
   return (
     <tr className={`border-b border-line/60 last:border-0 transition hover:bg-panel2/40 ${dimmed ? "opacity-50" : ""}`}>
       <td className="px-4 py-3 font-medium text-text">{client.name}</td>
       <td className="px-4 py-3">
         <input
+          ref={colorRef}
           type="color"
-          value={client.color || fallbackColor}
+          value={draftColor ?? (client.color || fallbackColor)}
           disabled={savingColor}
-          onChange={(e) => handleColorChange(e.target.value)}
+          onChange={(e) => setDraftColor(e.target.value)}
           title="Color del cliente en Entregas"
           className="h-6 w-9 cursor-pointer rounded border border-line bg-transparent p-0 disabled:opacity-50"
         />
@@ -138,55 +149,12 @@ function ClientRow({
 }
 
 export default function ClientesPage() {
-  const router = useRouter();
-  const supabase = createClient();
-
-  const [currentUser, setCurrentUser] = useState<Profile | null>(null);
-  const [loadingAuth, setLoadingAuth] = useState(true);
+  const currentUser = useSession();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [isNewClientOpen, setIsNewClientOpen] = useState(false);
   const [isPaymentsOpen, setIsPaymentsOpen] = useState(false);
-
-  // 1. Validar sesión y obtener Perfil real desde public.profiles
-  useEffect(() => {
-    const checkUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        router.push("/login");
-        return;
-      }
-
-      const { data: userProfile } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .single();
-
-      setCurrentUser(
-        (userProfile as Profile) || {
-          id: user.id,
-          email: user.email || "",
-          full_name: user.email?.split("@")[0] || "Usuario",
-          role: "prod",
-          initials: (user.email || "U").substring(0, 2).toUpperCase(),
-        }
-      );
-      setLoadingAuth(false);
-    };
-
-    checkUser();
-  }, [router, supabase]);
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
-  };
 
   const loadClients = async () => {
     try {
@@ -197,12 +165,9 @@ export default function ClientesPage() {
   };
 
   useEffect(() => {
-    if (loadingAuth) return;
-    (async () => {
-      await loadClients();
-      setLoading(false);
-    })();
-  }, [loadingAuth]);
+    if (!currentUser) return;
+    loadClients().then(() => setLoading(false));
+  }, [currentUser]);
 
   const handleCreateClient: React.ComponentProps<typeof NewClientModal>["onCreate"] = async (input) => {
     setSuccessMsg(null);
@@ -224,35 +189,16 @@ export default function ClientesPage() {
   const clientColorMap = buildClientColorMap(clients);
   const fallbackColorFor = (clientId: string) => clientColorMap.get(clientId) ?? "#91919a";
 
-
   const handleColorChange = (clientId: string, color: string) => {
     setClients((prev) => prev.map((c) => (c.id === clientId ? { ...c, color } : c)));
   };
 
-  if (loadingAuth || !currentUser) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-ink text-muted font-mono text-sm">
-        Cargando sesión...
-      </div>
-    );
-  }
+  if (!currentUser) return <SessionLoading />;
 
   return (
-    <div className="flex h-screen text-text">
-      <Sidebar role={currentUser.role} />
-      <div className="flex flex-1 flex-col overflow-y-auto bg-ink">
-        <TopBar profile={currentUser} onLogout={handleLogout} />
-
-
+    <PageShell profile={currentUser}>
         <div className="p-6 space-y-6">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <span className="text-xs text-muted">Operación › Clientes</span>
-              <h1 className="text-2xl font-bold font-display bg-gradient-to-r from-text to-muted bg-clip-text text-transparent">
-                Clientes
-              </h1>
-            </div>
-            {(
+          <PageHeader crumb="Operación › Clientes" title="Clientes">
               <div className="flex gap-2">
                 <button
                   onClick={() => setIsPaymentsOpen(true)}
@@ -267,8 +213,7 @@ export default function ClientesPage() {
                   <LuPlus className="h-3.5 w-3.5" /> Agregar cliente
                 </button>
               </div>
-            )}
-          </div>
+          </PageHeader>
 
           {successMsg && <p className="text-xs text-emerald-600">{successMsg}</p>}
 
@@ -322,8 +267,8 @@ export default function ClientesPage() {
                             key={client.id}
                             client={client}
                             fallbackColor={fallbackColorFor(client.id)}
-                            onColorChange={handleColorChange}
-                        onTogglePause={handleTogglePause}
+                                onColorChange={handleColorChange}
+                            onTogglePause={handleTogglePause}
                             dimmed
                           />
                         ))}
@@ -335,7 +280,6 @@ export default function ClientesPage() {
             </div>
           )}
         </div>
-      </div>
 
       <NewClientModal
         isOpen={isNewClientOpen}
@@ -347,6 +291,6 @@ export default function ClientesPage() {
         onClose={() => setIsPaymentsOpen(false)}
         clients={clients}
       />
-    </div>
+    </PageShell>
   );
 }

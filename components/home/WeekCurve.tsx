@@ -3,9 +3,8 @@
 import { useMemo, useState } from "react";
 import { EVENT_TYPE_COLOR, PIECE_STATUS_COLOR, pieceLabel } from "@/lib/types";
 import { pieceDate, weekDays, type WeeklyRecap } from "@/lib/weekly";
+import { WEEKDAYS } from "@/lib/utils";
 import { weekDuePieces } from "./WeekHeadline";
-
-const DAY_SHORT = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
 /** Curva suave (Catmull-Rom convertida a Bézier) a través de los puntos dados. */
 function smoothPath(pts: { x: number; y: number }[]): string {
@@ -108,7 +107,7 @@ export default function WeekCurve({ recap, todayISO }: { recap: WeeklyRecap; tod
               i === active ? "bg-panel2 font-semibold text-text" : "text-muted"
             }`}
           >
-            <span>{DAY_SHORT[i]}</span>
+            <span>{WEEKDAYS[i]}</span>
             <span className={d.date === todayISO ? "text-primary" : ""}>
               {Number(d.date.slice(8, 10))}
             </span>

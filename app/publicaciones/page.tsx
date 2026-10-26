@@ -1,54 +1,22 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
-import { LuX } from "react-icons/lu";
 import { useEffectiveRole } from "@/lib/roleView";
-import Sidebar from "@/components/Sidebar";
-import TopBar from "@/components/TopBar";
 import ContentPieceModal from "@/components/ContentPieceModal";
 import PautaSection from "@/components/PautaSection";
 import { updatePautaPost, type PautaPost } from "@/lib/pauta";
-import { pieceLabel, type ContentPiece, type Client, type Profile } from "@/lib/types";
+import { ErrorBanner, MonthNav, PageHeader, PageShell, SessionLoading } from "@/components/ui";
+import { pieceLabel, type ContentPiece, type Client } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
-import { updatePieceStatus, updatePieceDueDateAndName } from "@/lib/deliveries";
+import { updateContentPiece, deleteContentPiece } from "@/lib/deliveries";
+import { useSession } from "@/lib/useSession";
+import { MONTH_NAMES, WEEKDAYS, buildGrid, errText, groupBy, iso as toISO } from "@/lib/utils";
 
-const WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 const DAY_NAMES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
-const MONTH_NAMES = [
-  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-];
-
-function toISO(d: Date): string {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function buildGrid(month: Date): Date[] {
-  const first = new Date(month.getFullYear(), month.getMonth(), 1);
-  const firstWeekday = (first.getDay() + 6) % 7; // 0 = lunes
-  const gridStart = new Date(first);
-  gridStart.setDate(first.getDate() - firstWeekday);
-
-  const days: Date[] = [];
-  for (let i = 0; i < 42; i++) {
-    const d = new Date(gridStart);
-    d.setDate(gridStart.getDate() + i);
-    days.push(d);
-  }
-  return days;
-}
 
 export default function PublicacionesPage() {
-  const router = useRouter();
-  const supabase = createClient();
-
-  const [currentUser, setCurrentUser] = useState<Profile | null>(null);
+  const currentUser = useSession();
   const role = useEffectiveRole(currentUser?.role);
-  const [loadingAuth, setLoadingAuth] = useState(true);
 
   const [pieces, setPieces] = useState<ContentPiece[]>([]);
   // Día seleccionado (clic en el fondo de una casilla) para la lista lateral.
@@ -72,6 +40,7 @@ export default function PublicacionesPage() {
   // que ya tienen fecha de entrega asignada (ver dayPieces más abajo).
   const loadData = async () => {
     setLoading(true);
+    const supabase = createClient();
     const [piecesRes, clientsRes] = await Promise.all([
       supabase.from("content_pieces").select("*, client:clients(*)"),
       supabase.from("clients").select("*").order("name"),
@@ -87,84 +56,31 @@ export default function PublicacionesPage() {
     setLoading(false);
   };
 
-  // 1. Validar sesión y obtener Perfil real desde public.profiles
   useEffect(() => {
-    const checkUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        router.push("/login");
-        return;
-      }
-
-      const { data: userProfile } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .single();
-
-      setCurrentUser(
-        (userProfile as Profile) || {
-          id: user.id,
-          email: user.email || "",
-          full_name: user.email?.split("@")[0] || "Usuario",
-          role: "prod",
-          initials: (user.email || "U").substring(0, 2).toUpperCase(),
-        }
-      );
-      setLoadingAuth(false);
-    };
-
-    checkUser();
-  }, [router, supabase]);
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
-  };
-
-  useEffect(() => {
-    if (!loadingAuth) {
-      loadData();
-    }
-  }, [loadingAuth]);
+    if (currentUser) loadData();
+  }, [currentUser]);
 
   const filteredPieces = useMemo(() => {
     if (selectedClientId === "all") return pieces;
     return pieces.filter((p) => p.client_id === selectedClientId);
   }, [pieces, selectedClientId]);
 
-  const piecesByDate = useMemo(() => {
-    const map = new Map<string, ContentPiece[]>();
-    for (const p of filteredPieces) {
-      if (!p.due_date) continue;
-      const list = map.get(p.due_date) ?? [];
-      list.push(p);
-      map.set(p.due_date, list);
-    }
-    return map;
-  }, [filteredPieces]);
+  const piecesByDate = useMemo(
+    () => groupBy(filteredPieces.filter((p) => p.due_date), (p) => p.due_date!),
+    [filteredPieces]
+  );
 
   // Piezas aprobadas (revisadas y listas) que aún no tienen fecha de publicación
   // asignada, agrupadas por cliente -- se muestran debajo del calendario para
   // poder darles clic (elegir fecha) o arrastrarlas a un día.
   const unscheduledByClient = useMemo(() => {
     const unscheduled = filteredPieces.filter((p) => p.status === "aprobado" && !p.due_date);
-    const groups = new Map<string, { client: Client | undefined; pieces: ContentPiece[] }>();
-    for (const p of unscheduled) {
-      const key = p.client_id ?? "sin-cliente";
-      if (!groups.has(key)) groups.set(key, { client: p.client, pieces: [] });
-      groups.get(key)!.pieces.push(p);
-    }
-    for (const group of groups.values()) {
-      group.pieces.sort((a, b) => a.code.localeCompare(b.code));
-    }
-    return [...groups.values()].sort((a, b) =>
-      (a.client?.name ?? "").localeCompare(b.client?.name ?? "")
-    );
+    return [...groupBy(unscheduled, (p) => p.client_id ?? "sin-cliente").values()]
+      .map((pieces) => ({
+        client: pieces[0].client,
+        pieces: pieces.sort((a, b) => a.code.localeCompare(b.code)),
+      }))
+      .sort((a, b) => (a.client?.name ?? "").localeCompare(b.client?.name ?? ""));
   }, [filteredPieces]);
 
   // Clientes con paquete "Solamente Pauta"
@@ -183,16 +99,11 @@ export default function PublicacionesPage() {
   const days = useMemo(() => buildGrid(month), [month]);
 
   const pautaByDate = useMemo(() => {
-    const allowed = new Map(pautaClients.map((c) => [c.id, c]));
-    const map = new Map<string, (PautaPost & { clientName: string })[]>();
-    for (const p of pautaPosts) {
-      const client = allowed.get(p.client_id);
-      if (!client || !p.scheduled_date) continue;
-      const list = map.get(p.scheduled_date) ?? [];
-      list.push({ ...p, clientName: client.name });
-      map.set(p.scheduled_date, list);
-    }
-    return map;
+    const allowed = new Map(pautaClients.map((c) => [c.id, c.name]));
+    const visible = pautaPosts
+      .filter((p) => allowed.has(p.client_id) && p.scheduled_date)
+      .map((p) => ({ ...p, clientName: allowed.get(p.client_id)! }));
+    return groupBy(visible, (p) => p.scheduled_date!);
   }, [pautaPosts, pautaClients]);
   const todayISO = toISO(new Date());
 
@@ -206,14 +117,14 @@ export default function PublicacionesPage() {
     setSavingId(piece.id);
     setErrorMsg(null);
     try {
-      await updatePieceStatus(piece.id, newStatus);
+      await updateContentPiece({ pieceId: piece.id, status: newStatus });
       setPieces((prev) =>
         prev.map((p) => (p.id === piece.id ? { ...p, status: newStatus } : p))
       );
     } catch (err) {
       console.error("Error al actualizar publicación:", err);
       setErrorMsg(
-        `No se pudo actualizar ${pieceLabel(piece)}: ${err instanceof Error ? err.message : String(err)}`
+        `No se pudo actualizar ${pieceLabel(piece)}: ${errText(err)}`
       );
     } finally {
       setSavingId(null);
@@ -229,7 +140,7 @@ export default function PublicacionesPage() {
     } catch (err) {
       console.error("Error al actualizar post de pauta:", err);
       setErrorMsg(
-        `No se pudo actualizar ${post.name}: ${err instanceof Error ? err.message : String(err)}`
+        `No se pudo actualizar ${post.name}: ${errText(err)}`
       );
     } finally {
       setSavingId(null);
@@ -256,7 +167,7 @@ export default function PublicacionesPage() {
   ) => {
     setErrorMsg(null);
     try {
-      await updatePieceDueDateAndName(pieceId, dueDate, displayName, month);
+      await updateContentPiece({ pieceId, dueDate, displayName, month });
       setPieces((prev) =>
         prev.map((p) =>
           p.id === pieceId ? { ...p, due_date: dueDate, display_name: displayName, month } : p
@@ -265,8 +176,20 @@ export default function PublicacionesPage() {
     } catch (err) {
       console.error("Error al guardar la pieza:", err);
       setErrorMsg(
-        `No se pudo guardar la pieza: ${err instanceof Error ? err.message : String(err)}`
+        `No se pudo guardar la pieza: ${errText(err)}`
       );
+    }
+  };
+
+  const handleDeletePiece = async (pieceId: string) => {
+    setErrorMsg(null);
+    try {
+      await deleteContentPiece(pieceId);
+      setPieces((prev) => prev.filter((p) => p.id !== pieceId));
+    } catch (err) {
+      console.error("Error al borrar la pieza:", err);
+      setErrorMsg(`No se pudo borrar la pieza: ${errText(err)}`);
+      throw err;
     }
   };
 
@@ -277,76 +200,27 @@ export default function PublicacionesPage() {
     if (pieceId) handleAssignDueDate(pieceId, iso);
   };
 
-  function changeMonth(delta: number) {
-    setMonth((m) => new Date(m.getFullYear(), m.getMonth() + delta, 1));
-  }
-
-  if (loadingAuth || !currentUser) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-ink text-muted font-mono text-sm">
-        Cargando sesión...
-      </div>
-    );
-  }
+  if (!currentUser) return <SessionLoading />;
 
   return (
-    <div className="flex h-screen text-text">
-      <Sidebar role={currentUser.role} />
-      <div className="flex flex-1 flex-col overflow-y-auto bg-ink">
-        <TopBar profile={currentUser} onLogout={handleLogout} />
-
+    <PageShell profile={currentUser}>
         <div className="p-6 space-y-6">
-          {/* Header */}
-          <div>
-            <span className="text-xs text-muted">Operación › Publicaciones</span>
-            <h1 className="text-2xl font-bold font-display bg-gradient-to-r from-text to-muted bg-clip-text text-transparent">Publicaciones</h1>
-          </div>
+          <PageHeader crumb="Operación › Publicaciones" title="Publicaciones" />
 
           {/* Nota explicativa del checkmark */}
           <div className="rounded-xl border border-line bg-panel2/50 px-4 py-2.5 text-[11px] text-muted">
             Si una pieza tiene <span className="font-semibold text-emerald-400">✓ checkmark</span>, ha sido programado.
           </div>
 
-          {errorMsg && (
-            <div className="flex items-start justify-between gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-300">
-              <span>{errorMsg}</span>
-              <button
-                onClick={() => setErrorMsg(null)}
-                aria-label="Cerrar aviso"
-                className="shrink-0 rounded-md p-1 -m-1 text-red-300 hover:bg-red-500/10 hover:text-red-100"
-              >
-                <LuX className="h-4 w-4" />
-              </button>
-            </div>
-          )}
+          <ErrorBanner message={errorMsg} onClose={() => setErrorMsg(null)} />
 
           {/* Filtros: mes y cliente */}
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-panel px-4 py-3 shadow-sm">
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => setMonth(new Date())}
-                className="rounded-md border border-line px-3 py-1.5 text-xs text-muted hover:text-text hover:bg-panel2"
-              >
-                Hoy
-              </button>
-              <button
-                onClick={() => changeMonth(-1)}
-                aria-label="Mes anterior"
-                className="rounded-md border border-line px-2.5 py-1.5 text-sm text-muted hover:text-text hover:bg-panel2"
-              >
-                ‹
-              </button>
-              <button
-                onClick={() => changeMonth(1)}
-                aria-label="Mes siguiente"
-                className="rounded-md border border-line px-2.5 py-1.5 text-sm text-muted hover:text-text hover:bg-panel2"
-              >
-                ›
-              </button>
-              <span className="ml-2 font-display text-sm font-semibold text-text">
-                {MONTH_NAMES[month.getMonth()]} {month.getFullYear()}
-              </span>
-            </div>
+            <MonthNav
+              month={month}
+              onChange={setMonth}
+              label={`${MONTH_NAMES[month.getMonth()]} ${month.getFullYear()}`}
+            />
 
             <select
               value={selectedClientId}
@@ -520,16 +394,18 @@ export default function PublicacionesPage() {
                           piece.status === "publicado" ? "bg-emerald-500/10" : "bg-panel2/50"
                         }`}
                       >
-                        <p
-                          className={`break-words text-xs font-medium ${
-                            piece.status === "publicado" ? "text-emerald-300" : "text-text"
-                          }`}
-                        >
-                          {pieceLabel(piece)}
-                        </p>
-                        {piece.client?.name && (
-                          <p className="break-words text-[11px] text-muted">{piece.client.name}</p>
-                        )}
+                        <button type="button" onClick={() => setSelectedPiece(piece)} className="w-full text-left">
+                          <p
+                            className={`break-words text-xs font-medium ${
+                              piece.status === "publicado" ? "text-emerald-300" : "text-text"
+                            }`}
+                          >
+                            {pieceLabel(piece)}
+                          </p>
+                          {piece.client?.name && (
+                            <p className="break-words text-[11px] text-muted">{piece.client.name}</p>
+                          )}
+                        </button>
                       </li>
                     ))}
                     {selectedPauta.map((post) => (
@@ -611,14 +487,14 @@ export default function PublicacionesPage() {
             </>
           )}
         </div>
-      </div>
 
       <ContentPieceModal
         isOpen={!!selectedPiece}
         onClose={() => setSelectedPiece(null)}
         piece={selectedPiece}
         onSave={handleSavePiece}
+        onDelete={handleDeletePiece}
       />
-    </div>
+    </PageShell>
   );
 }

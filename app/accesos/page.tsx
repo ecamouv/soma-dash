@@ -1,12 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { LuKeyRound, LuPlus, LuSearch, LuStar, LuArrowUpRight, LuPencil } from "react-icons/lu";
-import Sidebar from "@/components/Sidebar";
-import TopBar from "@/components/TopBar";
 import AccessModal from "@/components/AccessModal";
-import type { Profile } from "@/lib/types";
+import { PageHeader, PageShell, SessionLoading } from "@/components/ui";
 import {
   createWebAccess,
   deleteWebAccess,
@@ -17,7 +14,7 @@ import {
   type WebAccess,
   type WebAccessInput,
 } from "@/lib/accesses";
-import { createClient } from "@/lib/supabase/client";
+import { useSession } from "@/lib/useSession";
 
 function SectionPill({ section }: { section: string }) {
   const c = sectionColor(section);
@@ -118,11 +115,7 @@ function AccessTable({
 }
 
 export default function AccesosPage() {
-  const router = useRouter();
-  const supabase = createClient();
-
-  const [currentUser, setCurrentUser] = useState<Profile | null>(null);
-  const [loadingAuth, setLoadingAuth] = useState(true);
+  const currentUser = useSession();
   const [items, setItems] = useState<WebAccess[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -131,30 +124,6 @@ export default function AccesosPage() {
     open: false,
     access: null,
   });
-
-  useEffect(() => {
-    const checkUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        router.push("/login");
-        return;
-      }
-      const { data: userProfile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
-      setCurrentUser(
-        (userProfile as Profile) || {
-          id: user.id,
-          email: user.email || "",
-          full_name: user.email?.split("@")[0] || "Usuario",
-          role: "prod",
-          initials: (user.email || "U").substring(0, 2).toUpperCase(),
-        }
-      );
-      setLoadingAuth(false);
-    };
-    checkUser();
-  }, [router, supabase]);
 
   const load = async () => {
     try {
@@ -167,14 +136,8 @@ export default function AccesosPage() {
   };
 
   useEffect(() => {
-    if (!loadingAuth) load();
-  }, [loadingAuth]);
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
-  };
+    if (currentUser) load();
+  }, [currentUser]);
 
   const sections = useMemo(() => {
     const counts = new Map<string, number>();
@@ -207,13 +170,7 @@ export default function AccesosPage() {
     await load();
   };
 
-  if (loadingAuth || !currentUser) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-ink text-muted font-mono text-sm">
-        Cargando sesión...
-      </div>
-    );
-  }
+  if (!currentUser) return <SessionLoading />;
 
   const favorites = filtered.filter((a) => a.favorite);
   const groups = sections
@@ -221,27 +178,25 @@ export default function AccesosPage() {
     .filter((g) => g.rows.length > 0);
 
   return (
-    <div className="flex h-screen text-text">
-      <Sidebar role={currentUser.role} />
-      <div className="flex flex-1 flex-col overflow-y-auto bg-ink">
-        <TopBar profile={currentUser} onLogout={handleLogout} />
-
+    <PageShell profile={currentUser}>
         <div className="space-y-5 p-6">
-          <div className="flex items-end justify-between gap-3">
-            <div>
-              <span className="text-xs text-muted">Operación › Accesos Web</span>
-              <h1 className="flex items-center gap-2 text-2xl font-bold font-display bg-gradient-to-r from-text to-muted bg-clip-text text-transparent">
+          <PageHeader
+            crumb="Operación › Accesos Web"
+            title={
+              <>
                 <LuKeyRound className="h-6 w-6 text-text" />
                 Accesos Web
-              </h1>
-            </div>
+              </>
+            }
+            className="flex items-end justify-between gap-3"
+          >
             <button
               onClick={() => setModal({ open: true, access: null })}
               className="flex items-center gap-1 rounded-md bg-gradient-to-r from-brand to-brand2 px-4 py-2 text-xs font-semibold text-white shadow hover:brightness-110"
             >
               <LuPlus className="h-3.5 w-3.5" /> Nueva
             </button>
-          </div>
+          </PageHeader>
 
           <div className="relative max-w-md">
             <LuSearch className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
@@ -310,7 +265,6 @@ export default function AccesosPage() {
             </div>
           )}
         </div>
-      </div>
 
       <AccessModal
         isOpen={modal.open}
@@ -324,6 +278,6 @@ export default function AccesosPage() {
           await load();
         }}
       />
-    </div>
+    </PageShell>
   );
 }

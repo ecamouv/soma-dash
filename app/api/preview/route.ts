@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/apiAuth";
 
 type Platform = "youtube" | "tiktok" | "instagram" | "otro";
 
@@ -102,11 +102,8 @@ async function fetchJson(endpoint: string): Promise<Record<string, unknown> | nu
 // (nunca una URL arbitraria), y requiere sesión. Si algo falla, devuelve campos vacíos
 // y el link se guarda igual.
 export async function GET(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  const auth = await requireUser();
+  if (auth instanceof NextResponse) return auth;
 
   const raw = new URL(request.url).searchParams.get("url")?.trim();
   if (!raw) return NextResponse.json({ error: "Falta el link." }, { status: 400 });

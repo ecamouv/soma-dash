@@ -1,13 +1,9 @@
 "use client";
 
+import { Modal } from "@/components/ui";
 import { useState, useEffect } from "react";
-import { LuX } from "react-icons/lu";
 import type { Client } from "@/lib/types";
-
-const MONTH_NAMES = [
-  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-];
+import { MONTH_NAMES, errText } from "@/lib/utils";
 
 interface NewPieceModalProps {
   isOpen: boolean;
@@ -67,26 +63,14 @@ export default function NewPieceModal({
       });
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errText(err));
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-sm rounded-2xl border border-line bg-panel p-6 shadow-2xl text-text">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-bold font-display text-text">Nueva pieza</h2>
-          <button
-            onClick={onClose}
-            aria-label="Cerrar"
-            className="rounded-md p-1 -m-1 text-muted hover:bg-panel2 hover:text-text"
-          >
-            <LuX className="h-5 w-5" />
-          </button>
-        </div>
-
+    <Modal title="Nueva pieza" onClose={onClose}>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-medium text-muted mb-1">Cliente</label>
@@ -195,7 +179,6 @@ export default function NewPieceModal({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }

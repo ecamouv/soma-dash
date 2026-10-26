@@ -1,7 +1,8 @@
 "use client";
 
+import { errText } from "@/lib/utils";
+import { Modal } from "@/components/ui";
 import { useEffect, useState } from "react";
-import { LuX } from "react-icons/lu";
 import { ROLE_LABEL, type UserRole } from "@/lib/types";
 
 interface Props {
@@ -43,26 +44,14 @@ export default function TeamMemberModal({ isOpen, onClose, onCreate }: Props) {
       await onCreate({ fullName: fullName.trim(), email: email.trim(), role });
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errText(err));
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-sm rounded-2xl border border-line bg-panel p-6 shadow-2xl text-text">
-        <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-lg font-bold font-display">Agregar integrante</h2>
-          <button
-            onClick={onClose}
-            aria-label="Cerrar"
-            className="-m-1 rounded-md p-1 text-muted hover:bg-panel2 hover:text-text"
-          >
-            <LuX className="h-5 w-5" />
-          </button>
-        </div>
-
+    <Modal title="Agregar integrante" onClose={onClose}>
         <form onSubmit={submit} className="space-y-3">
           <label className="block space-y-1">
             <span className="text-[11px] font-semibold text-muted">Nombre completo</span>
@@ -110,7 +99,6 @@ export default function TeamMemberModal({ isOpen, onClose, onCreate }: Props) {
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }

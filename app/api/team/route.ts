@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/apiAuth";
 import type { UserRole } from "@/lib/types";
 
 const ROLES: UserRole[] = ["prod", "admin", "community", "editor", "dev"];
@@ -15,24 +14,9 @@ function initialsOf(name: string): string {
 // y envía el link para definir su contraseña) y crea/actualiza su fila en public.profiles.
 // Solo puede usarlo un usuario con role "admin".
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-
-  const { data: me } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (me?.role !== "admin" && me?.role !== "dev") {
-    return NextResponse.json({ error: "Solo un administrador puede agregar integrantes." }, { status: 403 });
-  }
-
-  const admin = createAdminClient();
-  if (!admin) {
-    return NextResponse.json(
-      { error: "Falta SUPABASE_SERVICE_ROLE_KEY en el servidor. Agrégala a las variables de entorno." },
-      { status: 500 }
-    );
-  }
+  const auth = await requireAdmin("agregar integrantes");
+  if (auth instanceof NextResponse) return auth;
+  const { admin } = auth;
 
   const body = (await request.json()) as { fullName?: string; email?: string; role?: UserRole };
   const fullName = body.fullName?.trim();
@@ -81,24 +65,9 @@ export async function POST(request: Request) {
 // es editor de alguna pieza, se rechaza el borrado en vez de dejar que una FK ponga
 // editor_id en null o borre piezas.
 export async function DELETE(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-
-  const { data: me } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (me?.role !== "admin" && me?.role !== "dev") {
-    return NextResponse.json({ error: "Solo un administrador puede eliminar integrantes." }, { status: 403 });
-  }
-
-  const admin = createAdminClient();
-  if (!admin) {
-    return NextResponse.json(
-      { error: "Falta SUPABASE_SERVICE_ROLE_KEY en el servidor. Agrégala a las variables de entorno." },
-      { status: 500 }
-    );
-  }
+  const auth = await requireAdmin("eliminar integrantes");
+  if (auth instanceof NextResponse) return auth;
+  const { user, admin } = auth;
 
   const { userId } = (await request.json()) as { userId?: string };
   if (!userId) return NextResponse.json({ error: "Falta el integrante." }, { status: 400 });

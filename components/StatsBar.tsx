@@ -3,30 +3,13 @@
 import { useMemo } from "react";
 import { LuVideo, LuMapPin, LuCalendarDays, LuClapperboard } from "react-icons/lu";
 import type { CalendarEvent } from "@/lib/types";
-
-function startOfWeek(d: Date): Date {
-  const date = new Date(d);
-  const day = date.getDay(); // 0 = domingo
-  const diff = day === 0 ? -6 : 1 - day; // semana inicia en lunes
-  date.setDate(date.getDate() + diff);
-  date.setHours(0, 0, 0, 0);
-  return date;
-}
-
-function endOfWeek(d: Date): Date {
-  const start = startOfWeek(d);
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  end.setHours(23, 59, 59, 999);
-  return end;
-}
+import { weekRange } from "@/lib/weekly";
+import { iso } from "@/lib/utils";
 
 export default function StatsBar({ events }: { events: CalendarEvent[] }) {
   const stats = useMemo(() => {
-    const today = new Date();
-    const todayISO = today.toISOString().slice(0, 10);
-    const weekStart = startOfWeek(today);
-    const weekEnd = endOfWeek(today);
+    const todayISO = iso(new Date());
+    const week = weekRange();
 
     const grabaciones = events.filter((e) => e.event_type === "grabacion");
 
@@ -36,10 +19,9 @@ export default function StatsBar({ events }: { events: CalendarEvent[] }) {
       (e) => e.event_date === todayISO
     ).length;
 
-    const grabacionesSemana = grabaciones.filter((e) => {
-      const d = new Date(e.event_date + "T00:00:00");
-      return d >= weekStart && d <= weekEnd;
-    }).length;
+    const grabacionesSemana = grabaciones.filter(
+      (e) => e.event_date >= week.start && e.event_date <= week.end
+    ).length;
 
     const piezasContenido = grabaciones.reduce(
       (sum, e) => sum + e.content_pieces.length,

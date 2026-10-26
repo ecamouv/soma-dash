@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { LuVideo, LuUsers, LuPackage, LuReceipt, LuChevronLeft, LuChevronRight, LuX, LuClock, LuMapPin } from "react-icons/lu";
+import { MONTH_NAMES, WEEKDAYS, addMonths, buildGrid, groupBy, iso as toISO } from "@/lib/utils";
 
 export type PublicCalendarItemType = "grabacion" | "junta" | "entrega" | "pago";
 
@@ -41,34 +42,6 @@ const TYPE_META: Record<
   },
 };
 
-const WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
-const MONTH_NAMES = [
-  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-];
-
-function toISO(d: Date): string {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function buildGrid(month: Date): Date[] {
-  const first = new Date(month.getFullYear(), month.getMonth(), 1);
-  const firstWeekday = (first.getDay() + 6) % 7; // 0 = lunes
-  const gridStart = new Date(first);
-  gridStart.setDate(first.getDate() - firstWeekday);
-
-  const days: Date[] = [];
-  for (let i = 0; i < 42; i++) {
-    const d = new Date(gridStart);
-    d.setDate(gridStart.getDate() + i);
-    days.push(d);
-  }
-  return days;
-}
-
 export default function PublicCalendarView({ items }: { items: PublicCalendarItem[] }) {
   const [month, setMonth] = useState(() => new Date());
   const days = useMemo(() => buildGrid(month), [month]);
@@ -84,16 +57,7 @@ export default function PublicCalendarView({ items }: { items: PublicCalendarIte
     return () => window.removeEventListener("keydown", onKey);
   }, [selectedDate]);
 
-
-  const itemsByDate = useMemo(() => {
-    const map = new Map<string, PublicCalendarItem[]>();
-    for (const item of items) {
-      const list = map.get(item.date) ?? [];
-      list.push(item);
-      map.set(item.date, list);
-    }
-    return map;
-  }, [items]);
+  const itemsByDate = useMemo(() => groupBy(items, (item) => item.date), [items]);
 
   const selectedItems = selectedDate ? itemsByDate.get(selectedDate) ?? [] : [];
 
@@ -125,7 +89,7 @@ export default function PublicCalendarView({ items }: { items: PublicCalendarIte
         </button>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
+            onClick={() => setMonth((m) => addMonths(m, -1))}
             aria-label="Mes anterior"
             className="rounded-md border border-[#E6E2DA] p-1.5 text-[#8A8680] hover:text-[#2A2823] hover:bg-[#F7F5F2] transition"
           >
@@ -135,7 +99,7 @@ export default function PublicCalendarView({ items }: { items: PublicCalendarIte
             {MONTH_NAMES[month.getMonth()]} {month.getFullYear()}
           </span>
           <button
-            onClick={() => setMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1))}
+            onClick={() => setMonth((m) => addMonths(m, 1))}
             aria-label="Mes siguiente"
             className="rounded-md border border-[#E6E2DA] p-1.5 text-[#8A8680] hover:text-[#2A2823] hover:bg-[#F7F5F2] transition"
           >

@@ -1,13 +1,10 @@
 import { createClient } from "@/lib/supabase/client";
 import type { CalendarEvent, Client, ContentPiece } from "@/lib/types";
+import { iso } from "@/lib/utils";
 
 export interface WeekRange {
   start: string; // lunes, YYYY-MM-DD
   end: string; // domingo, YYYY-MM-DD
-}
-
-export function iso(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 /** Semana lunes-domingo, desplazada `offset` semanas respecto a hoy. */

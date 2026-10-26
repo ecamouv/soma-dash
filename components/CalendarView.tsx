@@ -1,33 +1,9 @@
 "use client";
 
 import { useMemo } from "react";
-import type { CalendarEvent } from "@/lib/types";
-import { EVENT_TYPE_COLOR } from "@/lib/types";
-
-const WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
-const MONTH_NAMES = [
-  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-];
-
-function toISO(d: Date) {
-  return d.toISOString().slice(0, 10);
-}
-
-function buildGrid(month: Date): Date[] {
-  const first = new Date(month.getFullYear(), month.getMonth(), 1);
-  const firstWeekday = (first.getDay() + 6) % 7; // 0 = lunes
-  const gridStart = new Date(first);
-  gridStart.setDate(first.getDate() - firstWeekday);
-
-  const days: Date[] = [];
-  for (let i = 0; i < 42; i++) {
-    const d = new Date(gridStart);
-    d.setDate(gridStart.getDate() + i);
-    days.push(d);
-  }
-  return days;
-}
+import { EVENT_TYPE_COLOR, type CalendarEvent } from "@/lib/types";
+import { MonthNav } from "@/components/ui";
+import { MONTH_NAMES, WEEKDAYS, buildGrid, groupBy, iso as toISO } from "@/lib/utils";
 
 export default function CalendarView({
   month,
@@ -45,19 +21,7 @@ export default function CalendarView({
   const days = useMemo(() => buildGrid(month), [month]);
   const todayISO = toISO(new Date());
 
-  const eventsByDate = useMemo(() => {
-    const map = new Map<string, CalendarEvent[]>();
-    for (const e of events) {
-      const list = map.get(e.event_date) ?? [];
-      list.push(e);
-      map.set(e.event_date, list);
-    }
-    return map;
-  }, [events]);
-
-  function changeMonth(delta: number) {
-    onMonthChange(new Date(month.getFullYear(), month.getMonth() + delta, 1));
-  }
+  const eventsByDate = useMemo(() => groupBy(events, (e) => e.event_date), [events]);
 
   return (
     <div className="mx-6 mb-8 mt-6 shrink-0 overflow-hidden rounded-card border border-line bg-panel">
@@ -65,28 +29,7 @@ export default function CalendarView({
         <h2 className="font-display text-lg font-semibold text-text">
           {MONTH_NAMES[month.getMonth()]} {month.getFullYear()}
         </h2>
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={() => onMonthChange(new Date())}
-            className="rounded-md border border-line px-3 py-1.5 text-xs text-muted hover:text-text hover:bg-panel2"
-          >
-            Hoy
-          </button>
-          <button
-            onClick={() => changeMonth(-1)}
-            aria-label="Mes anterior"
-            className="rounded-md border border-line px-2.5 py-1.5 text-sm text-muted hover:text-text hover:bg-panel2"
-          >
-            ‹
-          </button>
-          <button
-            onClick={() => changeMonth(1)}
-            aria-label="Mes siguiente"
-            className="rounded-md border border-line px-2.5 py-1.5 text-sm text-muted hover:text-text hover:bg-panel2"
-          >
-            ›
-          </button>
-        </div>
+        <MonthNav month={month} onChange={onMonthChange} />
       </div>
 
       <div className="grid grid-cols-7 border-b border-line bg-panel2/40">

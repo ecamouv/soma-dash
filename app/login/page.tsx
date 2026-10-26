@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
+import AuthCard from "@/components/AuthCard";
 import { LuEye, LuEyeClosed } from "react-icons/lu";
 import { createClient } from "@/lib/supabase/client";
 
@@ -73,33 +73,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-ink p-4">
-      {/* Logo grande como backdrop. Difuminado a propósito: el archivo fuente es de
-          baja resolución (377x377) y se ve pixelado si se muestra nítido a este tamaño. */}
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-60">
-        <Image
-          src="/SOMA-Logo.jpeg"
-          alt=""
-          width={900}
-          height={900}
-          className="h-[90vh] w-[90vh] max-w-none object-contain blur-2xl"
-          priority
-        />
-      </div>
-
-      <div className="relative z-10 w-full max-w-md rounded-2xl border border-line bg-panel p-8 shadow-2xl">
-        {/* Header con Imagen */}
-        <div className="flex flex-col items-center justify-center mb-6">
-          <Image
-            src="/SOMA-Corner.png"
-            alt="SOMA Logo"
-            width={140}
-            height={243}
-            className="h-20 w-auto object-contain mb-2"
-            priority
-          />
-        </div>
-
+    <AuthCard>
         {mode === "login" ? (
           <form onSubmit={handleLogin} className="space-y-4">
             {errorMsg && (
@@ -225,7 +199,6 @@ export default function LoginPage() {
             </button>
           </form>
         )}
-      </div>
-    </div>
+    </AuthCard>
   );
 }

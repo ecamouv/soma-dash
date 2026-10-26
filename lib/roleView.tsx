@@ -1,11 +1,11 @@
 "use client";
 
-import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 import type { UserRole } from "@/lib/types";
+import { useStoredState } from "@/lib/useStoredState";
 
 // Solo para usuarios con rol "dev": elige con qué rol se ve la interfaz. No cambia el
 // rol guardado del usuario ni los permisos reales del servidor.
-const STORAGE_KEY = "soma-view-as-role";
 const VALID_ROLES: UserRole[] = ["dev", "admin", "prod", "community", "editor"];
 
 interface RoleViewValue {
@@ -15,28 +15,9 @@ interface RoleViewValue {
 
 const RoleViewContext = createContext<RoleViewValue>({ viewAs: "dev", setViewAs: () => undefined });
 
-function readStored(): UserRole {
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (raw && (VALID_ROLES as string[]).includes(raw)) return raw as UserRole;
-  } catch {
-    // sin acceso a localStorage: se queda en dev
-  }
-  return "dev";
-}
-
 export function RoleViewProvider({ children }: { children: ReactNode }) {
-  const [viewAs, setViewAsState] = useState<UserRole>(() => (typeof window === "undefined" ? "dev" : readStored()));
-
-  const setViewAs = useCallback((role: UserRole) => {
-    setViewAsState(role);
-    try {
-      window.localStorage.setItem(STORAGE_KEY, role);
-    } catch {
-      // ignorar
-    }
-  }, []);
-
+  const [stored, setViewAs] = useStoredState<UserRole>("soma-view-as-role", "dev");
+  const viewAs = VALID_ROLES.includes(stored) ? stored : "dev";
   return <RoleViewContext.Provider value={{ viewAs, setViewAs }}>{children}</RoleViewContext.Provider>;
 }
 

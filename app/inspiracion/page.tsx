@@ -4,9 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LuArrowUpRight, LuLoaderCircle, LuPencil, LuPlus, LuTrash2 } from "react-icons/lu";
 import { useEffectiveRole } from "@/lib/roleView";
-import Sidebar from "@/components/Sidebar";
-import TopBar from "@/components/TopBar";
-import type { Client, Profile } from "@/lib/types";
+import { PageShell, SessionLoading } from "@/components/ui";
+import type { Client } from "@/lib/types";
 import {
   PLATFORM_LABEL,
   SECTORS,
@@ -17,12 +16,12 @@ import {
   type InspirationItem,
 } from "@/lib/inspiration";
 import { createClient } from "@/lib/supabase/client";
+import { useSession } from "@/lib/useSession";
+import { groupBy } from "@/lib/utils";
 
 export default function InspiracionPage() {
   const router = useRouter();
-  const supabase = createClient();
-
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const profile = useSession();
   const role = useEffectiveRole(profile?.role);
   const [items, setItems] = useState<InspirationItem[]>([]);
   const [clients, setClients] = useState<Pick<Client, "id" | "name">[]>([]);
@@ -43,28 +42,12 @@ export default function InspiracionPage() {
   }, [role, router]);
 
   useEffect(() => {
-    const init = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        router.push("/login");
-        return;
-      }
-      const { data: p } = await supabase.from("profiles").select("*").eq("id", user.id).single();
-      setProfile(
-        (p as Profile) || {
-          id: user.id,
-          email: user.email || "",
-          full_name: user.email?.split("@")[0] || "Usuario",
-          role: "prod",
-          initials: (user.email || "U").substring(0, 2).toUpperCase(),
-        }
-      );
+    if (!profile) return;
+    (async () => {
       try {
         const [list, cl] = await Promise.all([
           fetchInspiration(),
-          supabase.from("clients").select("id, name").eq("paused", false).order("name"),
+          createClient().from("clients").select("id, name").eq("paused", false).order("name"),
         ]);
         setItems(list);
         setClients((cl.data ?? []) as Pick<Client, "id" | "name">[]);
@@ -73,9 +56,8 @@ export default function InspiracionPage() {
         setError("No se pudo cargar la inspiración. Revisa que la migración esté aplicada.");
       }
       setLoading(false);
-    };
-    init();
-  }, [router, supabase]);
+    })();
+  }, [profile]);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,36 +124,15 @@ export default function InspiracionPage() {
     const keyOf = (i: InspirationItem) =>
       view === "cliente" ? (i.client?.name ?? "") : (i.sector ?? "");
     const empty = view === "cliente" ? "Sin cliente" : "Sin sector";
-    const map = new Map<string, InspirationItem[]>();
-    for (const i of items) {
-      const k = keyOf(i);
-      map.set(k, [...(map.get(k) ?? []), i]);
-    }
-    return [...map.entries()]
+    return [...groupBy(items, keyOf).entries()]
       .sort(([a], [b]) => (a === "" ? 1 : b === "" ? -1 : a.localeCompare(b)))
       .map(([k, list]) => ({ key: k || "__none", label: k || empty, list }));
   })();
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
-  };
-
-  if (!profile || role === "community") {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-ink text-muted font-mono text-sm">
-        Cargando sesión...
-      </div>
-    );
-  }
+  if (!profile || role === "community") return <SessionLoading />;
 
   return (
-    <div className="flex h-screen text-text">
-      <Sidebar role={profile.role} />
-      <div className="flex flex-1 flex-col overflow-y-auto bg-ink">
-        <TopBar profile={profile} onLogout={handleLogout} />
-
+    <PageShell profile={profile}>
         <div className="max-w-5xl space-y-6 p-6">
           <div>
             <span className="text-xs text-muted">Soma › Inspiración</span>
@@ -347,7 +308,6 @@ export default function InspiracionPage() {
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </PageShell>
   );
 }

@@ -11,9 +11,9 @@ import {
   savePostsPerWeek,
   syncPautaMonth,
   updatePautaPost,
-  weeksInMonth,
   type PautaPost,
 } from "@/lib/pauta";
+import { errText, groupBy, iso as toISO, weeksInMonth } from "@/lib/utils";
 
 // Tope del selector de posts por semana. Es solo un límite de la interfaz.
 const MAX_POSTS_PER_WEEK = 14;
@@ -33,25 +33,15 @@ interface Props {
   onError: (message: string | null) => void;
 }
 
-function errText(err: unknown): string {
-  if (err instanceof Error) return err.message;
-  if (err && typeof err === "object" && "message" in err) return String((err as { message: unknown }).message);
-  return String(err);
-}
-
 function parseISO(iso: string): Date {
   const [y, m, d] = iso.split("-").map(Number);
   return new Date(y, m - 1, d);
 }
 
-function toISODate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 function shiftDays(iso: string, days: number): string {
   const d = parseISO(iso);
   d.setDate(d.getDate() + days);
-  return toISODate(d);
+  return toISO(d);
 }
 
 function formatDateLabel(iso: string): string {
@@ -96,18 +86,11 @@ export default function PautaSection({ clients, allClients, month, posts, setPos
   const colorMap = useMemo(() => buildClientColorMap(allClients), [allClients]);
   const colorOf = (clientId: string) => colorMap.get(clientId) ?? "#91919a";
 
-
-  const postsByClient = useMemo(() => {
-    const map = new Map<string, PautaPost[]>();
-    for (const p of posts) {
-      // La lista muestra solo los posts de este mes; el resto (fechas de relleno) es del calendario.
-      if (p.year !== year || p.month !== monthNumber) continue;
-      const list = map.get(p.client_id) ?? [];
-      list.push(p);
-      map.set(p.client_id, list);
-    }
-    return map;
-  }, [posts, year, monthNumber]);
+  // La lista muestra solo los posts de este mes; el resto (fechas de relleno) es del calendario.
+  const postsByClient = useMemo(
+    () => groupBy(posts.filter((p) => p.year === year && p.month === monthNumber), (p) => p.client_id),
+    [posts, year, monthNumber]
+  );
 
   const reloadClientPosts = async (clientId: string) => {
     const fresh = await fetchPautaPosts(year, monthNumber, rangeStart, rangeEnd);
@@ -218,13 +201,8 @@ export default function PautaSection({ clients, allClients, month, posts, setPos
             const missing = missingPostCount(clientPosts, perWeek, weeks);
             const color = colorOf(client.id);
 
-            const byWeek = new Map<number, PautaPost[]>();
-            for (const p of clientPosts) {
-              const list = byWeek.get(p.week) ?? [];
-              list.push(p);
-              byWeek.set(p.week, list);
-            }
-            const weekNumbers = [...byWeek.keys()].sort((a, b) => a - b);
+            const byWeek = groupBy(clientPosts, (p) => String(p.week));
+            const weekNumbers = [...byWeek.keys()].map(Number).sort((a, b) => a - b);
 
             return (
               <div key={client.id} className="rounded-2xl border border-line bg-panel p-3 space-y-3 shadow-sm">
@@ -286,7 +264,7 @@ export default function PautaSection({ clients, allClients, month, posts, setPos
                       <div className="px-1 text-[10px] font-semibold uppercase tracking-wide text-muted">
                         Semana {week}
                       </div>
-                      {(byWeek.get(week) ?? []).map((post) => (
+                      {(byWeek.get(String(week)) ?? []).map((post) => (
                         <PostRow key={post.id} post={post} onPatch={patchPost} onSetDate={setPostDate} />
                       ))}
                     </div>

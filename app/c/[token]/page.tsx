@@ -1,5 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
 import Image from "next/image";
+import { createAdminClient } from "@/lib/supabase/admin";
 import PublicCalendarView, { type PublicCalendarItem } from "@/components/PublicCalendarView";
 import { pieceLabel } from "@/lib/types";
 
@@ -30,10 +30,9 @@ interface RawPayment {
 }
 
 async function getPublicCalendarData(token: string) {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  // Service role: las tablas ya no aceptan anon. Cada query de abajo se acota a este cliente.
+  const supabase = createAdminClient();
+  if (!supabase) throw new Error("Falta SUPABASE_SERVICE_ROLE_KEY en el servidor.");
 
   const { data: client } = await supabase
     .from("clients")

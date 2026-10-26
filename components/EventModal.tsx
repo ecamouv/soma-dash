@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { LuX } from "react-icons/lu";
+import { Modal } from "@/components/ui";
 import { pieceLabel, type CalendarEvent, type Client, type ContentPiece, type EventType, type Profile } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
 import { withoutDevs } from "@/lib/team";
+import { MONTH_NAMES } from "@/lib/utils";
 
 interface EventModalProps {
     isOpen: boolean;
@@ -22,11 +23,6 @@ interface EventModalProps {
 }
 
 const supabase = createClient()
-
-const MONTH_NAMES = [
-    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-];
 
 function monthOfDate(d: string): number {
     const dt = d ? new Date(d + "T00:00:00") : new Date();
@@ -307,9 +303,11 @@ export default function EventModal({
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-            <div className={`w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-card border ${currentStyle.border} bg-panel p-6 shadow-2xl text-text transition-colors`}>
-                <div className="flex items-center justify-between border-b border-line pb-4 mb-4">
+        <Modal
+            onClose={onClose}
+            className={`max-w-lg max-h-[90vh] overflow-y-auto rounded-card ${currentStyle.border} transition-colors`}
+            headerClassName="flex items-center justify-between border-b border-line pb-4 mb-4"
+            title={
                     <div className="flex items-center gap-2">
                         <span className={`px-2 py-0.5 text-xs font-semibold rounded ${currentStyle.bg} ${currentStyle.text} border ${currentStyle.border}`}>
                             {currentStyle.label}
@@ -318,14 +316,8 @@ export default function EventModal({
                             {selectedEvent ? "Editar Evento" : "Agendar Evento"}
                         </h2>
                     </div>
-                    <button
-                        onClick={onClose}
-                        aria-label="Cerrar"
-                        className="rounded-md p-1 -m-1 text-muted hover:bg-panel2 hover:text-text"
-                    >
-                        <LuX className="h-5 w-5" />
-                    </button>
-                </div>
+            }
+        >
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
@@ -352,11 +344,11 @@ export default function EventModal({
                                 onChange={(e) => handleEventTypeChange(e.target.value as EventType)}
                                 className={`w-full rounded-md border ${currentStyle.border} ${currentStyle.bg} ${currentStyle.text} px-3 py-2 text-sm outline-none focus:border-brand2 font-medium`}
                             >
-                                <option value="grabacion" className="bg-panel text-text">🎥 Grabación</option>
-                                <option value="junta" className="bg-panel text-text">🤝 Junta</option>
-                                <option value="cobertura" className="bg-panel text-text">📸 Cobertura</option>
-                                <option value="entrega" className="bg-panel text-text">📦 Entrega</option>
-                                <option value="otro" className="bg-panel text-text">📌 Otro</option>
+                                {(Object.keys(EVENT_TYPE_STYLES) as EventType[]).map((t) => (
+                                    <option key={t} value={t} className="bg-panel text-text">
+                                        {EVENT_TYPE_STYLES[t].label}
+                                    </option>
+                                ))}
                             </select>
                         </div>
 
@@ -616,7 +608,6 @@ export default function EventModal({
                         </div>
                     </div>
                 </form>
-            </div>
-        </div>
+        </Modal>
     );
 }

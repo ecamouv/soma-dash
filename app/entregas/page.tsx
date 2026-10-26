@@ -1,23 +1,28 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { useRouter } from "next/navigation";
-import { LuChevronUp, LuChevronDown, LuChevronsUpDown, LuChevronRight, LuVideo, LuCamera, LuMaximize2, LuMinimize2, LuX } from "react-icons/lu";
-import Sidebar from "@/components/Sidebar";
-import TopBar from "@/components/TopBar";
+import { LuChevronUp, LuChevronDown, LuChevronsUpDown, LuChevronRight, LuVideo, LuCamera, LuMaximize2, LuMinimize2, LuLightbulb } from "react-icons/lu";
 import ContentPieceModal from "@/components/ContentPieceModal";
 import NewPieceModal from "@/components/NewPieceModal";
-import { pieceLabel, type ContentPiece, type Client, type PieceStatus, type Profile } from "@/lib/types";
+import { ErrorBanner, MonthNav, PageHeader, PageShell, SessionLoading } from "@/components/ui";
+import { pieceLabel, type ContentPiece, type Client, type PieceStatus } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
-import {
-  updatePieceStatus,
-  updatePieceDueDateAndName,
-  createContentPiece,
-  consumeBlankPlaceholder,
-  nextCodeNumbers,
-  buildPieceCode,
-} from "@/lib/deliveries";
+import { updateContentPiece, createContentPiece, consumeBlankPlaceholder, deleteContentPiece } from "@/lib/deliveries";
 import { buildClientColorMap, defaultClientColor, hexToRgba } from "@/lib/clientColors";
+import { pieceDate } from "@/lib/weekly";
+import { useSession } from "@/lib/useSession";
+import { useStoredState } from "@/lib/useStoredState";
+import {
+  MONTH_NAMES,
+  addMonths,
+  buildPieceCode,
+  byDateNullsLast,
+  errText,
+  groupBy,
+  isAheadOf,
+  iso,
+  nextCodeNumbers,
+} from "@/lib/utils";
 
 // Entregas cubre las etapas de producción, de "por_grabar" a "aprobado".
 // "publicado" se marca desde la página de Publicaciones y no vive aquí.
@@ -103,45 +108,9 @@ const PREV_STATUS: Partial<Record<PieceStatus, PieceStatus>> = {
   aprobado: "revision",
 };
 
-// El color por cliente (franja del kanban y encabezado de "Todas las piezas") ahora
-// sale de client.color si se asignó a mano en Clientes, o de defaultClientColor()
-// como paleta automática de respaldo -- ver lib/clientColors.ts.
-
-const MONTH_NAMES = [
-  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-];
-
-function startOfMonth(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), 1);
-}
-
-function endOfMonth(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth() + 1, 0);
-}
-
-function addMonths(d: Date, months: number): Date {
-  return new Date(d.getFullYear(), d.getMonth() + months, 1);
-}
-
-function toISO(d: Date): string {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
 function formatDay(iso: string): string {
   const [, month, day] = iso.split("-");
   return `${day}/${month}`;
-}
-
-// Fecha efectiva para ubicar una pieza en la grilla: su fecha de entrega si la tiene,
-// si no, la fecha del evento de grabación al que está ligada (event.event_date).
-function pieceDate(piece: ContentPiece): string | null {
-  if (piece.due_date) return piece.due_date;
-  if (piece.event?.event_date) return piece.event.event_date.slice(0, 10);
-  return null;
 }
 
 // "Adelantado": se calcula, no se guarda -- compara el mes en que realmente se grabó
@@ -152,9 +121,7 @@ function pieceDate(piece: ContentPiece): string | null {
 function isAdvancePiece(piece: ContentPiece): boolean {
   if (!piece.event?.event_date) return false;
   const eventMonth = Number(piece.event.event_date.slice(5, 7));
-  if (!eventMonth || eventMonth === piece.month) return false;
-  if (piece.month === 1 && eventMonth === 12) return true;
-  return eventMonth < piece.month;
+  return !!eventMonth && isAheadOf(piece.month, eventMonth);
 }
 
 // Tag compacto de 2-3 letras para identificar cliente en la tarjeta sin repetir el
@@ -179,20 +146,9 @@ interface ClientGroup {
 // ese orden dentro de cada grupo. Los grupos se ordenan por la fecha más próxima que
 // tengan (su primera pieza, ya que cada grupo hereda el orden de la lista original).
 function groupPiecesByClient(pieces: ContentPiece[]): ClientGroup[] {
-  const map = new Map<string, ClientGroup>();
-  for (const p of pieces) {
-    const key = p.client_id ?? "sin-cliente";
-    if (!map.has(key)) map.set(key, { key, client: p.client, pieces: [] });
-    map.get(key)!.pieces.push(p);
-  }
-  return [...map.values()].sort((a, b) => {
-    const aDate = a.pieces[0]?.due_date;
-    const bDate = b.pieces[0]?.due_date;
-    if (!aDate && !bDate) return 0;
-    if (!aDate) return 1;
-    if (!bDate) return -1;
-    return aDate.localeCompare(bDate);
-  });
+  return [...groupBy(pieces, (p) => p.client_id ?? "sin-cliente").entries()]
+    .map(([key, list]) => ({ key, client: list[0].client, pieces: list }))
+    .sort((a, b) => byDateNullsLast(a.pieces[0].due_date, b.pieces[0].due_date));
 }
 
 function comparePieces(
@@ -201,15 +157,8 @@ function comparePieces(
   by: "code" | "due_date",
   dir: "asc" | "desc"
 ): number {
-  let cmp: number;
-  if (by === "due_date") {
-    if (!a.due_date && !b.due_date) cmp = a.code.localeCompare(b.code);
-    else if (!a.due_date) cmp = 1;
-    else if (!b.due_date) cmp = -1;
-    else cmp = a.due_date.localeCompare(b.due_date) || a.code.localeCompare(b.code);
-  } else {
-    cmp = a.code.localeCompare(b.code);
-  }
+  const byCode = a.code.localeCompare(b.code);
+  const cmp = by === "due_date" ? byDateNullsLast(a.due_date, b.due_date) || byCode : byCode;
   return dir === "desc" ? -cmp : cmp;
 }
 
@@ -235,15 +184,10 @@ function SortIcon({
 // contenido por ver y desaparece al llegar al fondo del scroll.
 const PIECES_TABLE_MAX_HEIGHT = "18.5rem";
 
-// Encabezado de cliente en blanco/negro puro -- deliberadamente sin la paleta de
-// color por cliente (esa se queda solo en el kanban, ver CLIENT_COLOR_PALETTE). Acá
-// la identidad se construye con tipografía (h1 grande y condensada), stroke, sombra
-// y gradiente en vez de tono, para diferenciarse del resto del dashboard.
 // Solo visual: fondo blanco suave si la pieza es para hoy, tinte crimson si ya se pasó la fecha.
 function dueHighlight(piece: ContentPiece): string {
   if (!piece.due_date || piece.status === "publicado") return "";
-  const t = new Date();
-  const today = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+  const today = iso(new Date());
   if (piece.due_date < today) return "!border-[rgb(255_77_109/0.5)] !bg-[rgb(255_77_109/0.12)]";
   if (piece.due_date === today) return "!border-white/[0.5] !bg-white/[0.15]";
   return "";
@@ -389,28 +333,26 @@ function ClientPieceTable({
 }
 
 export default function DeliveriesPage() {
-  const router = useRouter();
-  const supabase = createClient();
-
-  const [currentUser, setCurrentUser] = useState<Profile | null>(null);
-  const [loadingAuth, setLoadingAuth] = useState(true);
+  const currentUser = useSession();
 
   const [pieces, setPieces] = useState<ContentPiece[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   // Lista completa (con pausados) solo para calcular colores igual que en Clientes.
   const [allClients, setAllClients] = useState<Client[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>("all");
-  const [month, setMonth] = useState<Date>(() => startOfMonth(new Date()));
+  const [month, setMonth] = useState<Date>(() => addMonths(new Date(), 0));
+  // Foquito de la barra del mes: activa el resaltado de piezas de hoy y atrasadas.
+  const [showDueHighlight, setShowDueHighlight] = useState(false);
   const [loading, setLoading] = useState(true);
   const [movingId, setMovingId] = useState<string | null>(null);
   const [selectedPiece, setSelectedPiece] = useState<ContentPiece | null>(null);
   const [isNewPieceOpen, setIsNewPieceOpen] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  // Vista activa: kanban o tabla por cliente -- nunca las dos a la vez (eran la misma
-  // información duplicada). Persistida para no resetearse al volver a la página.
-  const [view, setView] = useState<"kanban" | "cliente">("kanban");
-  // Colapso de "Sin fecha de grabación", persistido para que no se resetee al volver.
-  const [unscheduledCollapsed, setUnscheduledCollapsed] = useState(false);
+  // Vista activa (kanban o tabla por cliente) y colapsos, recordados en este navegador.
+  const [view, setView] = useStoredState<"kanban" | "cliente">("entregas:view", "kanban");
+  const [unscheduledCollapsed, setUnscheduledCollapsed] = useStoredState("entregas:unscheduledCollapsed", false);
+  // Colapso por cliente dentro de cada columna del kanban. Clave "status:clientId".
+  const [collapsedGroups, setCollapsedGroups] = useStoredState<string[]>("entregas:kanbanCollapsedGroups", []);
   // Arrastrar-y-soltar entre columnas del kanban: solo permite el mismo salto de un
   // paso que ya permiten los botones ← / → (NEXT_STATUS/PREV_STATUS), para no saltarse
   // etapas del pipeline arrastrando.
@@ -421,109 +363,12 @@ export default function DeliveriesPage() {
     Record<string, { by: "code" | "due_date"; dir: "asc" | "desc" }>
   >({});
 
-  // 1. Validar sesión y obtener Perfil real desde public.profiles
-  useEffect(() => {
-    const checkUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        router.push("/login");
-        return;
-      }
-
-      const { data: userProfile } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .single();
-
-      setCurrentUser(
-        (userProfile as Profile) || {
-          id: user.id,
-          email: user.email || "",
-          full_name: user.email?.split("@")[0] || "Usuario",
-          role: "prod",
-          initials: (user.email || "U").substring(0, 2).toUpperCase(),
-        }
-      );
-      setLoadingAuth(false);
-    };
-
-    checkUser();
-  }, [router, supabase]);
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
-  };
-
-  // Persistir la vista activa y el colapso de "Sin fecha de grabación" en localStorage.
-  useEffect(() => {
-    try {
-      const storedView = localStorage.getItem("entregas:view");
-      if (storedView === "kanban" || storedView === "cliente") setView(storedView);
-      const stored = localStorage.getItem("entregas:unscheduledCollapsed");
-      if (stored !== null) setUnscheduledCollapsed(stored === "1");
-    } catch {
-      // localStorage no disponible (SSR, navegación privada, etc.) -- se ignora.
-    }
-  }, []);
-
-  const changeView = (next: "kanban" | "cliente") => {
-    setView(next);
-    try {
-      localStorage.setItem("entregas:view", next);
-    } catch {
-      // localStorage no disponible -- el estado en memoria sigue funcionando igual.
-    }
-  };
-
-  const toggleUnscheduledCollapsed = () => {
-    setUnscheduledCollapsed((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem("entregas:unscheduledCollapsed", next ? "1" : "0");
-      } catch {
-        // localStorage no disponible -- el estado en memoria sigue funcionando igual.
-      }
-      return next;
-    });
-  };
-
-  // Colapso por cliente dentro de cada columna del kanban. Clave "status:clientId".
-  // Es independiente del mes (no se borra al navegar) y persiste en localStorage.
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
-
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem("entregas:kanbanCollapsedGroups");
-      if (stored) {
-        const arr = JSON.parse(stored);
-        if (Array.isArray(arr)) setCollapsedGroups(new Set(arr.filter((x) => typeof x === "string")));
-      }
-    } catch {
-      // localStorage no disponible o JSON inválido -- se ignora.
-    }
-  }, []);
-
-  const toggleGroupCollapsed = (groupKey: string) => {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(groupKey)) next.delete(groupKey);
-      else next.add(groupKey);
-      try {
-        localStorage.setItem("entregas:kanbanCollapsedGroups", JSON.stringify(Array.from(next)));
-      } catch {
-        // localStorage no disponible -- el estado en memoria sigue funcionando igual.
-      }
-      return next;
-    });
-  };
-
   const getClientSort = (key: string) => clientSort[key] ?? { by: "code" as const, dir: "asc" as const };
+
+  const toggleGroupCollapsed = (groupKey: string) =>
+    setCollapsedGroups((prev) =>
+      prev.includes(groupKey) ? prev.filter((k) => k !== groupKey) : [...prev, groupKey]
+    );
 
   const toggleClientSort = (key: string, by: "code" | "due_date") => {
     setClientSort((prev) => {
@@ -534,13 +379,14 @@ export default function DeliveriesPage() {
     });
   };
 
-  const monthStartISO = useMemo(() => toISO(startOfMonth(month)), [month]);
-  const monthEndISO = useMemo(() => toISO(endOfMonth(month)), [month]);
+  const monthStartISO = iso(month);
+  const monthEndISO = iso(new Date(month.getFullYear(), month.getMonth() + 1, 0));
 
   // Los clientes pausados se filtran por completo: ni sus piezas ni ellos mismos
   // aparecen en ningún lado de Entregas (kanban, alertas, tabla maestra, selector).
   const loadData = async () => {
     setLoading(true);
+    const supabase = createClient();
     const [piecesRes, clientsRes] = await Promise.all([
       supabase.from("content_pieces").select("*, client:clients(*), event:events(event_date)"),
       supabase.from("clients").select("*").order("name"),
@@ -557,10 +403,8 @@ export default function DeliveriesPage() {
   };
 
   useEffect(() => {
-    if (!loadingAuth) {
-      loadData();
-    }
-  }, [loadingAuth]);
+    if (currentUser) loadData();
+  }, [currentUser]);
 
   const clientFilteredPieces = useMemo(() => {
     if (selectedClientId === "all") return pieces;
@@ -602,15 +446,9 @@ export default function DeliveriesPage() {
       const date = pieceDate(p);
       return !!date && date >= monthStartISO && date <= monthEndISO;
     });
-    const groups = new Map<string, { client: Client | undefined; pieces: ContentPiece[] }>();
-    for (const p of inMonth) {
-      const key = p.client_id ?? "sin-cliente";
-      if (!groups.has(key)) groups.set(key, { client: p.client, pieces: [] });
-      groups.get(key)!.pieces.push(p);
-    }
-    return [...groups.values()].sort((a, b) =>
-      (a.client?.name ?? "").localeCompare(b.client?.name ?? "")
-    );
+    return [...groupBy(inMonth, (p) => p.client_id ?? "sin-cliente").values()]
+      .map((pieces) => ({ client: pieces[0].client, pieces }))
+      .sort((a, b) => (a.client?.name ?? "").localeCompare(b.client?.name ?? ""));
   }, [clientFilteredPieces, monthStartISO, monthEndISO]);
 
   // Color por cliente para la franja del kanban y el encabezado de "Todas las
@@ -630,14 +468,7 @@ export default function DeliveriesPage() {
     for (const p of filteredPieces) {
       map.get(p.status)?.push(p);
     }
-    for (const list of map.values()) {
-      list.sort((a, b) => {
-        if (!a.due_date && !b.due_date) return 0;
-        if (!a.due_date) return 1;
-        if (!b.due_date) return -1;
-        return a.due_date.localeCompare(b.due_date);
-      });
-    }
+    for (const list of map.values()) list.sort((a, b) => byDateNullsLast(a.due_date, b.due_date));
     return map;
   }, [filteredPieces]);
 
@@ -645,16 +476,14 @@ export default function DeliveriesPage() {
     setMovingId(piece.id);
     setErrorMsg(null);
     try {
-      await updatePieceStatus(piece.id, newStatus);
+      await updateContentPiece({ pieceId: piece.id, status: newStatus });
       setPieces((prev) =>
         prev.map((p) => (p.id === piece.id ? { ...p, status: newStatus } : p))
       );
     } catch (err) {
       console.error("Error al mover la pieza:", err);
       setErrorMsg(
-        `No se pudo mover ${pieceLabel(piece)} a "${ALL_STATUS_META[newStatus]?.label ?? newStatus}": ${
-          err instanceof Error ? err.message : String(err)
-        }`
+        `No se pudo mover ${pieceLabel(piece)} a "${ALL_STATUS_META[newStatus]?.label ?? newStatus}": ${errText(err)}`
       );
     } finally {
       setMovingId(null);
@@ -676,7 +505,7 @@ export default function DeliveriesPage() {
   ) => {
     setErrorMsg(null);
     try {
-      await updatePieceDueDateAndName(pieceId, dueDate, displayName, pieceMonth);
+      await updateContentPiece({ pieceId, dueDate, displayName, month: pieceMonth });
       setPieces((prev) =>
         prev.map((p) =>
           p.id === pieceId
@@ -687,8 +516,20 @@ export default function DeliveriesPage() {
     } catch (err) {
       console.error("Error al guardar la pieza:", err);
       setErrorMsg(
-        `No se pudo guardar la pieza: ${err instanceof Error ? err.message : String(err)}`
+        `No se pudo guardar la pieza: ${errText(err)}`
       );
+      throw err;
+    }
+  };
+
+  const handleDeletePiece = async (pieceId: string) => {
+    setErrorMsg(null);
+    try {
+      await deleteContentPiece(pieceId);
+      setPieces((prev) => prev.filter((p) => p.id !== pieceId));
+    } catch (err) {
+      console.error("Error al borrar la pieza:", err);
+      setErrorMsg(`No se pudo borrar la pieza: ${errText(err)}`);
       throw err;
     }
   };
@@ -704,8 +545,7 @@ export default function DeliveriesPage() {
     // de más al total del paquete de ese mes, consume (borra) un cupo en blanco ya
     // generado por el paquete para ese cliente+mes+tipo -- si no hay ninguno en blanco
     // disponible, no se resta nada (nunca se toca una pieza con información real).
-    const currentRealMonth = new Date().getMonth() + 1;
-    if (input.month > currentRealMonth) {
+    if (isAheadOf(input.month, new Date().getMonth() + 1)) {
       await consumeBlankPlaceholder(input.clientId, input.month, input.type);
     }
 
@@ -729,34 +569,21 @@ export default function DeliveriesPage() {
     await loadData();
   };
 
-  if (loadingAuth || !currentUser) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-ink text-muted font-mono text-sm">
-        Cargando sesión...
-      </div>
-    );
-  }
+  if (!currentUser) return <SessionLoading />;
 
   return (
-    <div className="flex h-screen text-text">
-      <Sidebar role={currentUser.role} />
-      <div className="flex flex-1 flex-col overflow-y-auto bg-ink">
-        <TopBar profile={currentUser} onLogout={handleLogout} />
-
-
+    <PageShell profile={currentUser}>
         <div className="p-6 space-y-6">
-          {/* Header */}
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <span className="text-xs text-muted">Operación › Entregas</span>
-              <h1 className="text-2xl font-bold font-display bg-gradient-to-r from-text to-muted bg-clip-text text-transparent">Entregas</h1>
-            </div>
-
+          <PageHeader
+            crumb="Operación › Entregas"
+            title="Entregas"
+            className="flex flex-wrap items-center justify-between gap-4"
+          >
             <div className="flex items-center gap-3">
               <div className="flex items-center rounded-lg border border-line bg-panel p-0.5">
                 <button
                   type="button"
-                  onClick={() => changeView("kanban")}
+                  onClick={() => setView("kanban")}
                   className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
                     view === "kanban" ? "bg-panel2 text-text shadow-sm" : "text-muted hover:text-text"
                   }`}
@@ -765,7 +592,7 @@ export default function DeliveriesPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => changeView("cliente")}
+                  onClick={() => setView("cliente")}
                   className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
                     view === "cliente" ? "bg-panel2 text-text shadow-sm" : "text-muted hover:text-text"
                   }`}
@@ -780,48 +607,35 @@ export default function DeliveriesPage() {
                 + Nueva pieza
               </button>
             </div>
-          </div>
+          </PageHeader>
 
-          {errorMsg && (
-            <div className="flex items-start justify-between gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-300">
-              <span>{errorMsg}</span>
-              <button
-                onClick={() => setErrorMsg(null)}
-                aria-label="Cerrar aviso"
-                className="shrink-0 rounded-md p-1 -m-1 text-red-300 hover:bg-red-500/10 hover:text-red-100"
-              >
-                <LuX className="h-4 w-4" />
-              </button>
-            </div>
-          )}
+          <ErrorBanner message={errorMsg} onClose={() => setErrorMsg(null)} />
 
           {/* Filtros: mes y cliente */}
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-panel px-4 py-3 shadow-sm">
-            <div className="flex items-center gap-1.5">
+            <MonthNav
+              month={month}
+              onChange={setMonth}
+              label={`${MONTH_NAMES[month.getMonth()]} ${month.getFullYear()}`}
+            >
               <button
-                onClick={() => setMonth(startOfMonth(new Date()))}
-                className="rounded-md border border-line px-3 py-1.5 text-xs text-muted hover:text-text hover:bg-panel2"
+                type="button"
+                onClick={() => setShowDueHighlight((v) => !v)}
+                aria-pressed={showDueHighlight}
+                aria-label="Resaltar piezas de hoy y atrasadas"
+                title="Resaltar piezas de hoy y atrasadas"
+                className="ml-1 rounded-md p-1.5 text-muted hover:bg-panel2"
               >
-                Hoy
+                <LuLightbulb
+                  className="h-4 w-4"
+                  style={
+                    showDueHighlight
+                      ? { color: "var(--color-crimson)", fill: "var(--color-crimson)" }
+                      : undefined
+                  }
+                />
               </button>
-              <button
-                onClick={() => setMonth((m) => addMonths(m, -1))}
-                aria-label="Mes anterior"
-                className="rounded-md border border-line px-2.5 py-1.5 text-sm text-muted hover:text-text hover:bg-panel2"
-              >
-                ‹
-              </button>
-              <button
-                onClick={() => setMonth((m) => addMonths(m, 1))}
-                aria-label="Mes siguiente"
-                className="rounded-md border border-line px-2.5 py-1.5 text-sm text-muted hover:text-text hover:bg-panel2"
-              >
-                ›
-              </button>
-              <span className="ml-2 font-display text-sm font-semibold text-text">
-                {MONTH_NAMES[month.getMonth()]} {month.getFullYear()}
-              </span>
-            </div>
+            </MonthNav>
 
             <select
               value={selectedClientId}
@@ -842,7 +656,7 @@ export default function DeliveriesPage() {
             <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
               <button
                 type="button"
-                onClick={toggleUnscheduledCollapsed}
+                onClick={() => setUnscheduledCollapsed((v) => !v)}
                 className="flex w-full items-center gap-1.5 px-1 text-left"
               >
                 <LuChevronRight
@@ -935,7 +749,7 @@ export default function DeliveriesPage() {
                       {groups.map((g) => {
                         const groupKey = `${col.status}:${g.key}`;
                         const isGroupCollapsed =
-                          selectedClientId === "all" && collapsedGroups.has(groupKey);
+                          selectedClientId === "all" && collapsedGroups.includes(groupKey);
                         const groupColor = clientColorMap.get(g.key) ?? defaultClientColor(0);
                         return (
                         <div key={g.key}>
@@ -996,9 +810,9 @@ export default function DeliveriesPage() {
                                       setSelectedPiece(piece);
                                     }
                                   }}
-                                  className={`group relative min-w-0 w-full overflow-hidden rounded-lg border border-line bg-panel2 p-2 space-y-1 shadow-sm cursor-grab active:cursor-grabbing hover:border-brand2/50 transition ${
+                                  className={`group relative min-w-0 w-full overflow-hidden rounded-lg border border-line bg-panel2 p-2 space-y-1 shadow-sm cursor-grab active:cursor-grabbing hover:border-brand2/50 transition-none ${
                                     isDragging ? "opacity-40" : ""
-                                  } ${dueHighlight(piece)}`}
+                                  } ${showDueHighlight ? dueHighlight(piece) : ""}`}
                                 >
                                   <div className="flex items-start justify-between gap-2">
                                     <span className="min-w-0 flex-1 truncate font-display text-sm font-bold text-text">
@@ -1113,13 +927,13 @@ export default function DeliveriesPage() {
             </div>
           )}
         </div>
-      </div>
 
       <ContentPieceModal
         isOpen={!!selectedPiece}
         onClose={() => setSelectedPiece(null)}
         piece={selectedPiece}
         onSave={handleSavePiece}
+        onDelete={handleDeletePiece}
       />
 
       <NewPieceModal
@@ -1128,6 +942,6 @@ export default function DeliveriesPage() {
         clients={clients}
         onCreate={handleCreatePiece}
       />
-    </div>
+    </PageShell>
   );
 }

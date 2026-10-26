@@ -1,7 +1,9 @@
 "use client";
 
+import { errText } from "@/lib/utils";
+import { Modal } from "@/components/ui";
 import { useEffect, useState } from "react";
-import { LuX, LuTrash2 } from "react-icons/lu";
+import { LuTrash2 } from "react-icons/lu";
 import type { WebAccess, WebAccessInput } from "@/lib/accesses";
 
 interface Props {
@@ -90,26 +92,14 @@ export default function AccessModal({ isOpen, access, sections, defaultSection, 
       );
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errText(err));
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-line bg-panel p-6 shadow-2xl text-text">
-        <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-lg font-bold font-display">{access ? "Editar acceso" : "Nuevo acceso"}</h2>
-          <button
-            onClick={onClose}
-            aria-label="Cerrar"
-            className="-m-1 rounded-md p-1 text-muted hover:bg-panel2 hover:text-text"
-          >
-            <LuX className="h-5 w-5" />
-          </button>
-        </div>
-
+    <Modal title={access ? "Editar acceso" : "Nuevo acceso"} onClose={onClose} className="max-h-[90vh] max-w-lg overflow-y-auto rounded-2xl border-line">
         <form onSubmit={submit} className="space-y-3">
           <Field label="Plataforma *">{text("name", "Ej. Artlist")}</Field>
           <Field label="Link">{text("url", "artlist.io")}</Field>
@@ -181,7 +171,6 @@ export default function AccessModal({ isOpen, access, sections, defaultSection, 
             </div>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }

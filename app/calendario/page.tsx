@@ -1,16 +1,13 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
-import { LuX } from "react-icons/lu";
 import { isAdminRole, useEffectiveRole } from "@/lib/roleView";
-import { withoutDevs } from "@/lib/team";
-import Sidebar from "@/components/Sidebar";
-import TopBar from "@/components/TopBar";
+import { fetchTeam, withoutDevs } from "@/lib/team";
 import StatsBar from "@/components/StatsBar";
 import CalendarView from "@/components/CalendarView";
 import EventModal from "@/components/EventModal";
 import EventPreviewModal from "@/components/EventPreviewModal";
+import { ErrorBanner, PageHeader, PageShell, SessionLoading } from "@/components/ui";
 import type { CalendarEvent, Client, ContentPiece, Profile } from "@/lib/types";
 import {
   fetchClients,
@@ -20,16 +17,13 @@ import {
   sendInvitations,
 } from "@/lib/events";
 import { fetchContentPieces } from "@/lib/deliveries";
-import { createClient } from "@/lib/supabase/client";
+import { useSession } from "@/lib/useSession";
+import { errText } from "@/lib/utils";
 
 export default function DashboardPage() {
-  const router = useRouter();
-  const supabase = createClient();
-
-  const [currentUser, setCurrentUser] = useState<Profile | null>(null);
+  const currentUser = useSession();
   const role = useEffectiveRole(currentUser?.role);
   const [teamProfiles, setTeamProfiles] = useState<Profile[]>([]);
-  const [loadingAuth, setLoadingAuth] = useState(true);
 
   const [month, setMonth] = useState(new Date());
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -46,55 +40,7 @@ export default function DashboardPage() {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // 1. Validar sesión y obtener Perfil real desde public.profiles
-  useEffect(() => {
-    const checkUserAndLoadProfiles = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        router.push("/login");
-        return;
-      }
-
-      // Consultar perfil del usuario en la tabla profiles
-      const { data: userProfile } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .single();
-
-      if (userProfile) {
-        setCurrentUser(userProfile as Profile);
-      } else {
-        // Fallback en caso de que la tabla aún se esté poblando
-        setCurrentUser({
-          id: user.id,
-          email: user.email || "",
-          full_name: user.email?.split("@")[0] || "Usuario",
-          role: "prod",
-          initials: (user.email || "U").substring(0, 2).toUpperCase(),
-        });
-      }
-
-      // Si es Admin, cargar lista completa del equipo para el filtro
-      const { data: profilesData } = await supabase
-        .from("profiles")
-        .select("*")
-        .order("full_name", { ascending: true });
-
-      if (profilesData) {
-        setTeamProfiles(withoutDevs(profilesData as Profile[]));
-      }
-
-      setLoadingAuth(false);
-    };
-
-    checkUserAndLoadProfiles();
-  }, [router, supabase]);
-
-  // 2. Cargar datos del calendario. Los clientes pausados se filtran por completo:
+  // Cargar datos del calendario. Los clientes pausados se filtran por completo:
   // no aparecen en el selector ni sus eventos/piezas en el calendario.
   //
   // contentPieces se trae completo (todas las piezas de todos los clientes), no solo
@@ -116,10 +62,13 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    if (!loadingAuth) {
-      loadData();
-    }
-  }, [loadingAuth]);
+    if (!currentUser) return;
+    loadData();
+    // Lista del equipo para el filtro de admin.
+    fetchTeam()
+      .then((team) => setTeamProfiles(withoutDevs(team)))
+      .catch((err) => console.error("Error al cargar el equipo:", err));
+  }, [currentUser]);
 
   // 3. Lógica de Filtrado de Eventos
   const filteredEvents = useMemo(() => {
@@ -140,19 +89,7 @@ export default function DashboardPage() {
     });
   }, [events, selectedClientId, selectedProducerId, role]);
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
-  };
-
-  if (loadingAuth || !currentUser) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-ink text-muted font-mono text-sm">
-        Cargando sesión...
-      </div>
-    );
-  }
+  if (!currentUser) return <SessionLoading />;
 
   const handleDayClick = (date: string) => {
     setSelectedDate(date);
@@ -190,57 +127,36 @@ export default function DashboardPage() {
       } catch (inviteErr) {
         console.error("Error sincronizando Google Calendar:", inviteErr);
         setErrorMsg(
-          `El evento se guardó, pero no se pudo sincronizar con Google Calendar: ${
-            inviteErr instanceof Error ? inviteErr.message : String(inviteErr)
-          }`
+          `El evento se guardó, pero no se pudo sincronizar con Google Calendar: ${errText(inviteErr)}`
         );
       }
     } catch (err) {
       console.error("Error guardando evento:", err);
-      setErrorMsg(
-        `No se pudo guardar el evento: ${err instanceof Error ? err.message : String(err)}`
-      );
+      setErrorMsg(`No se pudo guardar el evento: ${errText(err)}`);
+      await loadData();
     }
   };
 
   const handleDeleteEvent = async (eventId: string) => {
     setErrorMsg(null);
-    const { googleSyncError } = await deleteEventFromSupabase(eventId);
-    await loadData();
-    if (googleSyncError) {
-      setErrorMsg(
-        `El evento se borró, pero no se pudo cancelar en Google Calendar: ${googleSyncError}`
-      );
+    try {
+      const { googleSyncError } = await deleteEventFromSupabase(eventId);
+      if (googleSyncError) {
+        setErrorMsg(`El evento se borró, pero no se pudo cancelar en Google Calendar: ${googleSyncError}`);
+      }
+    } catch (err) {
+      console.error("Error al eliminar evento:", err);
+      setErrorMsg(`No se pudo eliminar el evento: ${errText(err)}`);
     }
+    await loadData();
   };
 
   return (
-    <div className="flex h-screen text-text">
-      <Sidebar role={currentUser.role} />
-      <div className="flex flex-1 flex-col overflow-y-auto bg-ink">
-        <TopBar profile={currentUser} onLogout={handleLogout} />
-
+    <PageShell profile={currentUser}>
         <div className="p-6 space-y-6">
-          {/* Header */}
-          <div>
-            <span className="text-xs text-muted">Operación › Calendario</span>
-            <h1 className="text-2xl font-bold font-display bg-gradient-to-r from-text to-muted bg-clip-text text-transparent">
-              Calendario
-            </h1>
-          </div>
+          <PageHeader crumb="Operación › Calendario" title="Calendario" />
 
-          {errorMsg && (
-            <div className="flex items-start justify-between gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-300">
-              <span>{errorMsg}</span>
-              <button
-                onClick={() => setErrorMsg(null)}
-                aria-label="Cerrar aviso"
-                className="shrink-0 rounded-md p-1 -m-1 text-red-300 hover:bg-red-500/10 hover:text-red-100"
-              >
-                <LuX className="h-4 w-4" />
-              </button>
-            </div>
-          )}
+          <ErrorBanner message={errorMsg} onClose={() => setErrorMsg(null)} />
 
           {/* Barra de Filtros */}
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-panel px-4 py-3 shadow-sm">
@@ -306,7 +222,6 @@ export default function DashboardPage() {
           onDayClick={handleDayClick}
           onEventClick={handleEventClick}
         />
-      </div>
 
       <EventPreviewModal
         isOpen={isPreviewOpen}
@@ -325,6 +240,6 @@ export default function DashboardPage() {
         onSave={handleSaveEvent}
         onDelete={handleDeleteEvent}
       />
-    </div>
+    </PageShell>
   );
 }

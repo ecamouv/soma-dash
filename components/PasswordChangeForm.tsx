@@ -1,5 +1,6 @@
 "use client";
 
+import { errText } from "@/lib/utils";
 import { useState } from "react";
 import { LuEye, LuEyeClosed, LuTriangleAlert, LuCheck } from "react-icons/lu";
 import { createClient } from "@/lib/supabase/client";
@@ -55,7 +56,7 @@ export default function PasswordChangeForm({
       if (updateError) throw updateError;
       setStep("success");
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errText(err));
       setStep("form");
     } finally {
       setSaving(false);

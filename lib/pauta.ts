@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { weeksInMonth } from "@/lib/utils";
 
 export interface PautaPost {
   id: string;
@@ -10,16 +11,6 @@ export interface PautaPost {
   name: string;
   scheduled_date: string | null;
   published: boolean;
-}
-
-// Los posts de pauta se planean en máximo 4 semanas por mes (no hay semana 5).
-export const MAX_PAUTA_WEEKS = 4;
-
-/** Cantidad de semanas (filas lunes-domingo) que toca un mes, con tope de MAX_PAUTA_WEEKS. month0 es 0-11. */
-export function weeksInMonth(year: number, month0: number): number {
-  const firstWeekday = (new Date(year, month0, 1).getDay() + 6) % 7; // 0 = lunes
-  const daysInMonth = new Date(year, month0 + 1, 0).getDate();
-  return Math.min(Math.ceil((firstWeekday + daysInMonth) / 7), MAX_PAUTA_WEEKS);
 }
 
 /** Nombre automático: se entiende solo, sin necesidad de editarlo. */

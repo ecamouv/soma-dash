@@ -52,46 +52,14 @@ export default function Sidebar({ role }: { role?: UserRole }) {
   const { viewAs, setViewAs } = useRoleView();
 
   const navItems = [
-    {
-      label: "Soma",
-      href: "/",
-      icon: null,
-    },
-    {
-      label: "Calendario",
-      href: "/calendario",
-      icon: LuCalendar,
-    },
-    {
-      label: "Entregas",
-      href: "/entregas",
-      icon: LuPackageCheck,
-    },
-    {
-      label: "Publicaciones",
-      href: "/publicaciones",
-      icon: LuCalendarCheck,
-    },
-    {
-      label: "Inspiración",
-      href: "/inspiracion",
-      icon: LuLightbulb,
-    },
-    {
-      label: "Clientes",
-      href: "/clientes",
-      icon: LuUsers,
-    },
-        {
-      label: "Accesos Web",
-      href: "/accesos",
-      icon: LuAlbum,
-    },
-    {
-      label: "Equipo",
-      href: "/equipo",
-      icon: LuUsersRound,
-    },
+    { label: "Soma", href: "/", icon: null },
+    { label: "Calendario", href: "/calendario", icon: LuCalendar },
+    { label: "Entregas", href: "/entregas", icon: LuPackageCheck },
+    { label: "Publicaciones", href: "/publicaciones", icon: LuCalendarCheck },
+    { label: "Inspiración", href: "/inspiracion", icon: LuLightbulb },
+    { label: "Clientes", href: "/clientes", icon: LuUsers },
+    { label: "Accesos Web", href: "/accesos", icon: LuAlbum },
+    { label: "Equipo", href: "/equipo", icon: LuUsersRound },
   ];
 
   return (

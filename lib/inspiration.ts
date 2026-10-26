@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { normalizeUrl } from "@/lib/accesses";
 
 export type InspirationPlatform = "youtube" | "tiktok" | "instagram" | "otro";
 
@@ -62,7 +63,7 @@ export async function addInspiration(input: {
     platform: "otro",
     title: null,
     thumbnail_url: null,
-    url: /^https?:\/\//i.test(input.url) ? input.url : `https://${input.url}`,
+    url: normalizeUrl(input.url) ?? input.url,
   };
   try {
     const res = await fetch(`/api/preview?url=${encodeURIComponent(input.url)}`);

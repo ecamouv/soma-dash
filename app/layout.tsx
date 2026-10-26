@@ -11,7 +11,7 @@ const inter = Inter({
 
 export const metadata = {
   title: 'SOMA Dashboard',
-  description: 'Panel intero para equipo SOMA',
+  description: 'Panel interno para equipo SOMA',
 }
 
 export default function RootLayout({

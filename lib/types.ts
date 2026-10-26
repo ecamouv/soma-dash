@@ -29,7 +29,7 @@ export interface Profile {
 export interface Client {
   id: string;
   name: string;
-  // '1' | '2' | '3' | 'solamente_pauta' -- ver lib/packages.ts (PackageValue).
+  // '1' | '2' | '3' | '6_videos' | 'solamente_pauta' -- ver lib/packages.ts (PackageValue).
   package?: string | null;
   // Lo que paga el cliente (MXN). Puede quedar vacío hasta que se capture.
   price?: number | null;
