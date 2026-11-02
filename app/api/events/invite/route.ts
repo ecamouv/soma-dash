@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/apiAuth";
 import {
   createCalendarInvite,
   updateCalendarInvite,
@@ -14,15 +14,9 @@ import {
 // Si ya no quedan miembros con correo, se cancela el evento de Google (nadie a quien
 // notificar) y se limpia google_event_id.
 export async function POST(request: Request) {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  }
+  const auth = await requireUser();
+  if (auth instanceof NextResponse) return auth;
+  const { supabase } = auth;
 
   const { eventId, memberIds } = (await request.json()) as {
     eventId: string;
@@ -107,15 +101,9 @@ export async function POST(request: Request) {
 // Cancela el evento de Google Calendar ligado, si existe. Se llama antes de borrar
 // el evento de Soma (deleteEventFromSupabase necesita leer google_event_id primero).
 export async function DELETE(request: Request) {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  }
+  const auth = await requireUser();
+  if (auth instanceof NextResponse) return auth;
+  const { supabase } = auth;
 
   const { eventId } = (await request.json()) as { eventId: string };
   if (!eventId) {

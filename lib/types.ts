@@ -1,10 +1,12 @@
-export type UserRole = "prod" | "admin" | "community" | "editor";
+export type UserRole = "prod" | "admin" | "community" | "editor" | "dev" | "operaciones";
 
 export const ROLE_LABEL: Record<UserRole, string> = {
   prod: "Productor",
   admin: "Administrador",
   community: "Community Manager",
-  editor: "Editor"
+  editor: "Editor",
+  dev: "Desarrollador",
+  operaciones: "Operaciones"
 };
 
 export type EventType = "grabacion" | "cobertura" | "junta" | "entrega" | "otro";
@@ -28,7 +30,7 @@ export interface Profile {
 export interface Client {
   id: string;
   name: string;
-  // '1' | '2' | '3' | 'solamente_pauta' -- ver lib/packages.ts (PackageValue).
+  // '1' | '2' | '3' | '6_videos' | 'solamente_pauta' -- ver lib/packages.ts (PackageValue).
   package?: string | null;
   // Lo que paga el cliente (MXN). Puede quedar vacío hasta que se capture.
   price?: number | null;
@@ -42,15 +44,15 @@ export interface Client {
   color?: string | null;
 }
 
-export interface ClientPayment {
-  id: string;
-  client_id: string;
-  due_date: string;
-  label?: string | null;
-  amount?: number | null;
-}
-
 export type PieceStatus = 'por_grabar' | 'en_edicion' | 'revision' | 'aprobado' | 'publicado';
+
+export const PIECE_STATUS_COLOR: Record<PieceStatus, string> = {
+  por_grabar: "var(--color-ink-muted)",
+  en_edicion: "var(--color-accent-sky)",
+  revision: "var(--color-accent-orange)",
+  aprobado: "var(--color-accent-green)",
+  publicado: "var(--color-accent-purple)",
+};
 
 export interface ContentPiece {
   id: string;

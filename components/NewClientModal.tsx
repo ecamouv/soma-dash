@@ -1,26 +1,30 @@
 "use client";
 
+import { errText } from "@/lib/utils";
+import { Modal } from "@/components/ui";
 import { useState, useEffect } from "react";
-import { PACKAGE_LIST, type PackageValue } from "@/lib/packages";
+import type { PackageDef, PackageValue } from "@/lib/packages";
 
 interface NewClientModalProps {
   isOpen: boolean;
   onClose: () => void;
+  packages: PackageDef[];
   onCreate: (input: { name: string; packageValue: PackageValue }) => Promise<void> | void;
 }
 
-export default function NewClientModal({ isOpen, onClose, onCreate }: NewClientModalProps) {
+export default function NewClientModal({ isOpen, onClose, packages, onCreate }: NewClientModalProps) {
   const [name, setName] = useState("");
-  const [packageValue, setPackageValue] = useState<PackageValue>("1");
+  const [packageValue, setPackageValue] = useState<PackageValue>(packages[0]?.value ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setName("");
-      setPackageValue("1");
+      setPackageValue(packages[0]?.value ?? "");
       setError(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   if (!isOpen) return null;
@@ -31,31 +35,24 @@ export default function NewClientModal({ isOpen, onClose, onCreate }: NewClientM
       setError("Escribe el nombre del cliente.");
       return;
     }
+    if (!packageValue) {
+      setError("Elige un paquete.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
       await onCreate({ name: name.trim(), packageValue });
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errText(err));
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-sm rounded-2xl border border-line bg-panel p-6 shadow-2xl text-text">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-bold font-display text-text">Agregar cliente</h2>
-          <button
-            onClick={onClose}
-            className="text-muted hover:text-text text-xl leading-none"
-          >
-            ✕
-          </button>
-        </div>
-
+    <Modal title="Agregar cliente" onClose={onClose}>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-medium text-muted mb-1">
@@ -74,14 +71,14 @@ export default function NewClientModal({ isOpen, onClose, onCreate }: NewClientM
           <div>
             <label className="block text-xs font-medium text-muted mb-1">Paquete</label>
             <div className="grid grid-cols-2 gap-2">
-              {PACKAGE_LIST.map((pkg) => (
+              {packages.map((pkg) => (
                 <button
                   key={pkg.value}
                   type="button"
                   onClick={() => setPackageValue(pkg.value)}
                   className={`rounded-md border px-3 py-3 text-xs font-semibold transition ${
                     packageValue === pkg.value
-                      ? "bg-brand2 text-white border-brand2"
+                      ? "bg-brand2 text-on-primary border-brand2"
                       : "bg-panel2 border-line text-muted hover:text-text"
                   }`}
                 >
@@ -104,13 +101,12 @@ export default function NewClientModal({ isOpen, onClose, onCreate }: NewClientM
             <button
               type="submit"
               disabled={saving}
-              className="px-4 py-2 text-xs font-medium text-white bg-gradient-to-r from-brand to-brand2 hover:brightness-110 rounded-md shadow disabled:opacity-50"
+              className="px-4 py-2 text-xs font-medium text-on-primary bg-gradient-to-r from-brand to-brand2 hover:brightness-110 rounded-md shadow disabled:opacity-50"
             >
               {saving ? "Agregando..." : "Agregar cliente"}
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }

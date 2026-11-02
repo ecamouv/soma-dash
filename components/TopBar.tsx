@@ -2,14 +2,12 @@ import type { Profile } from "@/lib/types";
 
 interface TopBarProps {
   profile: Profile;
-  onLogout?: () => void; // 👈 Agrega esta línea
+  onLogout?: () => void;
 }
 
 export default function TopBar({ profile, onLogout }: TopBarProps) {
   return (
     <header className="flex items-center justify-between border-b border-line bg-panel px-6 py-4">
-      {/* Tu contenido del TopBar ... */}
-
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand2/20 text-brand2 font-bold text-xs">
@@ -20,7 +18,6 @@ export default function TopBar({ profile, onLogout }: TopBarProps) {
           </span>
         </div>
 
-        {/* Botón opcional para cerrar sesión */}
         {onLogout && (
           <button
             onClick={onLogout}
