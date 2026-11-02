@@ -6,7 +6,7 @@ import { useStoredState } from "@/lib/useStoredState";
 
 // Solo para usuarios con rol "dev": elige con qué rol se ve la interfaz. No cambia el
 // rol guardado del usuario ni los permisos reales del servidor.
-const VALID_ROLES: UserRole[] = ["dev", "admin", "prod", "community", "editor"];
+const VALID_ROLES: UserRole[] = ["dev", "admin", "prod", "community", "editor", "operaciones"];
 
 interface RoleViewValue {
   viewAs: UserRole;

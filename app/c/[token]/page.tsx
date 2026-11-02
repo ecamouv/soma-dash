@@ -2,6 +2,7 @@ import Image from "next/image";
 import { createAdminClient } from "@/lib/supabase/admin";
 import PublicCalendarView, { type PublicCalendarItem } from "@/components/PublicCalendarView";
 import { pieceLabel } from "@/lib/types";
+import { addPeriods, payDatesFor, periodOf } from "@/lib/billing";
 
 // Vista pública de solo lectura: se resuelve enteramente en el servidor (Server
 // Component). El navegador del cliente nunca recibe credenciales de Supabase ni
@@ -24,9 +25,9 @@ interface RawPiece {
   due_date: string;
 }
 
-interface RawPayment {
-  due_date: string;
-  label: string | null;
+interface RawBilling {
+  pay_day: number;
+  start_period: string;
 }
 
 async function getPublicCalendarData(token: string) {
@@ -60,10 +61,14 @@ async function getPublicCalendarData(token: string) {
       .eq("client_id", client.id)
       .not("due_date", "is", null),
     supabase
-      .from("client_payments")
-      .select("due_date, label")
-      .eq("client_id", client.id),
+      .from("client_billing")
+      .select("pay_day, start_period")
+      .eq("client_id", client.id)
+      .maybeSingle(),
   ]);
+
+  const billing = paymentsRes.data as RawBilling | null;
+  const todayISO = new Date().toISOString().slice(0, 10);
 
   const items: PublicCalendarItem[] = [
     ...((eventsRes.data as RawEvent[]) ?? []).map((e) => ({
@@ -78,11 +83,14 @@ async function getPublicCalendarData(token: string) {
       type: "entrega" as const,
       title: `Entrega ${pieceLabel(p)}`,
     })),
-    ...((paymentsRes.data as RawPayment[]) ?? []).map((pay) => ({
-      date: pay.due_date,
-      type: "pago" as const,
-      title: pay.label || "Pago",
-    })),
+    // Día de pago mensual: dos meses atrás y un año adelante (solo la fecha, nunca el monto).
+    ...(billing
+      ? payDatesFor(billing, addPeriods(periodOf(todayISO), -2), 14).map((date) => ({
+          date,
+          type: "pago" as const,
+          title: "Día de pago",
+        }))
+      : []),
   ];
 
   return { clientName: client.name as string, paused: false, items };

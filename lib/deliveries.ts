@@ -1,7 +1,13 @@
 import { createClient } from "@/lib/supabase/client";
 import type { ContentPiece, PieceStatus } from "@/lib/types";
+import { PIECES_CHANGED_EVENT } from "@/lib/useRevisionCount";
 
 const supabase = createClient();
+
+/** Avisa a la UI (por ejemplo, a la notificación del sidebar) que las piezas cambiaron. */
+function notifyPiecesChanged(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(PIECES_CHANGED_EVENT));
+}
 
 export interface UpdatePiecePayload {
   pieceId: string;
@@ -73,6 +79,7 @@ export async function updateContentPiece({
     .select("*, client:clients(*), editor:profiles(*)")
     .single();
   if (error) throw error;
+  notifyPiecesChanged();
   return data as ContentPiece;
 }
 
@@ -97,6 +104,7 @@ export async function createContentPiece(payload: CreatePiecePayload): Promise<C
     .select("*, client:clients(*), editor:profiles(*)")
     .single();
   if (error) throw error;
+  notifyPiecesChanged();
   return data as ContentPiece;
 }
 
@@ -144,4 +152,5 @@ export async function consumeBlankPlaceholder(
 export async function deleteContentPiece(pieceId: string): Promise<void> {
   const { error } = await supabase.from("content_pieces").delete().eq("id", pieceId);
   if (error) throw error;
+  notifyPiecesChanged();
 }

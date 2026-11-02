@@ -1,11 +1,12 @@
-export type UserRole = "prod" | "admin" | "community" | "editor" | "dev";
+export type UserRole = "prod" | "admin" | "community" | "editor" | "dev" | "operaciones";
 
 export const ROLE_LABEL: Record<UserRole, string> = {
   prod: "Productor",
   admin: "Administrador",
   community: "Community Manager",
   editor: "Editor",
-  dev: "Desarrollador"
+  dev: "Desarrollador",
+  operaciones: "Operaciones"
 };
 
 export type EventType = "grabacion" | "cobertura" | "junta" | "entrega" | "otro";
@@ -41,14 +42,6 @@ export interface Client {
   // Color asignado a mano desde Clientes (hex, ej. "#60a5fa"). Si es null, la UI
   // usa su paleta automática por defecto -- por ahora solo se usa en Entregas.
   color?: string | null;
-}
-
-export interface ClientPayment {
-  id: string;
-  client_id: string;
-  due_date: string;
-  label?: string | null;
-  amount?: number | null;
 }
 
 export type PieceStatus = 'por_grabar' | 'en_edicion' | 'revision' | 'aprobado' | 'publicado';

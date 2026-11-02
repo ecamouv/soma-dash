@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { LuChevronUp, LuChevronDown, LuChevronsUpDown, LuChevronRight, LuVideo, LuCamera, LuMaximize2, LuMinimize2, LuLightbulb } from "react-icons/lu";
 import ContentPieceModal from "@/components/ContentPieceModal";
 import NewPieceModal from "@/components/NewPieceModal";
@@ -11,6 +12,8 @@ import { updateContentPiece, createContentPiece, consumeBlankPlaceholder, delete
 import { buildClientColorMap, defaultClientColor, hexToRgba } from "@/lib/clientColors";
 import { pieceDate } from "@/lib/weekly";
 import { useSession } from "@/lib/useSession";
+import { useEffectiveRole } from "@/lib/roleView";
+import { canAccess } from "@/lib/roleAccess";
 import { useStoredState } from "@/lib/useStoredState";
 import {
   MONTH_NAMES,
@@ -333,7 +336,14 @@ function ClientPieceTable({
 }
 
 export default function DeliveriesPage() {
+  const router = useRouter();
   const currentUser = useSession();
+  const role = useEffectiveRole(currentUser?.role);
+  // Community no tiene esta sección: redirige sin mostrar nada.
+  const blocked = !canAccess(role, "/entregas");
+  useEffect(() => {
+    if (blocked) router.replace("/");
+  }, [blocked, router]);
 
   const [pieces, setPieces] = useState<ContentPiece[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -569,7 +579,7 @@ export default function DeliveriesPage() {
     await loadData();
   };
 
-  if (!currentUser) return <SessionLoading />;
+  if (!currentUser || blocked) return <SessionLoading />;
 
   return (
     <PageShell profile={currentUser}>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LuArrowUpRight, LuLoaderCircle, LuPencil, LuPlus, LuTrash2 } from "react-icons/lu";
 import { useEffectiveRole } from "@/lib/roleView";
+import { canAccess } from "@/lib/roleAccess";
 import { PageShell, SessionLoading } from "@/components/ui";
 import type { Client } from "@/lib/types";
 import {
@@ -36,10 +37,11 @@ export default function InspiracionPage() {
   const [view, setView] = useState<"todo" | "cliente" | "sector">("todo");
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  // Community managers no tienen esta sección: redirige sin mostrar nada.
+  // Community managers y Operaciones no tienen esta sección: redirige sin mostrar nada.
+  const blocked = !canAccess(role, "/inspiracion");
   useEffect(() => {
-    if (role === "community") router.replace("/");
-  }, [role, router]);
+    if (blocked) router.replace("/");
+  }, [blocked, router]);
 
   useEffect(() => {
     if (!profile) return;
@@ -129,7 +131,7 @@ export default function InspiracionPage() {
       .map(([k, list]) => ({ key: k || "__none", label: k || empty, list }));
   })();
 
-  if (!profile || role === "community") return <SessionLoading />;
+  if (!profile || blocked) return <SessionLoading />;
 
   return (
     <PageShell profile={profile}>

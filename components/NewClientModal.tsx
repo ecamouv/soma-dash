@@ -3,26 +3,28 @@
 import { errText } from "@/lib/utils";
 import { Modal } from "@/components/ui";
 import { useState, useEffect } from "react";
-import { PACKAGE_LIST, type PackageValue } from "@/lib/packages";
+import type { PackageDef, PackageValue } from "@/lib/packages";
 
 interface NewClientModalProps {
   isOpen: boolean;
   onClose: () => void;
+  packages: PackageDef[];
   onCreate: (input: { name: string; packageValue: PackageValue }) => Promise<void> | void;
 }
 
-export default function NewClientModal({ isOpen, onClose, onCreate }: NewClientModalProps) {
+export default function NewClientModal({ isOpen, onClose, packages, onCreate }: NewClientModalProps) {
   const [name, setName] = useState("");
-  const [packageValue, setPackageValue] = useState<PackageValue>("1");
+  const [packageValue, setPackageValue] = useState<PackageValue>(packages[0]?.value ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setName("");
-      setPackageValue("1");
+      setPackageValue(packages[0]?.value ?? "");
       setError(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   if (!isOpen) return null;
@@ -31,6 +33,10 @@ export default function NewClientModal({ isOpen, onClose, onCreate }: NewClientM
     e.preventDefault();
     if (!name.trim()) {
       setError("Escribe el nombre del cliente.");
+      return;
+    }
+    if (!packageValue) {
+      setError("Elige un paquete.");
       return;
     }
     setSaving(true);
@@ -65,7 +71,7 @@ export default function NewClientModal({ isOpen, onClose, onCreate }: NewClientM
           <div>
             <label className="block text-xs font-medium text-muted mb-1">Paquete</label>
             <div className="grid grid-cols-2 gap-2">
-              {PACKAGE_LIST.map((pkg) => (
+              {packages.map((pkg) => (
                 <button
                   key={pkg.value}
                   type="button"

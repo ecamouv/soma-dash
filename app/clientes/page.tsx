@@ -1,15 +1,22 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { LuLink, LuCheck, LuExternalLink, LuBookOpen, LuPlus, LuReceipt, LuSnowflake, LuPlay } from "react-icons/lu";
+import { LuLink, LuCheck, LuExternalLink, LuBookOpen, LuPlus, LuSnowflake, LuPlay, LuReceipt, LuPencil } from "react-icons/lu";
 import NewClientModal from "@/components/NewClientModal";
-import PaymentsModal from "@/components/PaymentsModal";
+import BillingModal from "@/components/BillingModal";
 import { PageHeader, PageShell, SessionLoading } from "@/components/ui";
 import type { Client } from "@/lib/types";
 import { createClientWithPackage, fetchClients, setClientColor, setClientPaused } from "@/lib/events";
-import { PACKAGES } from "@/lib/packages";
+import { packageSummary, type PackageMap } from "@/lib/packages";
+import { usePackages } from "@/lib/usePackages";
+import ChangePackageModal from "@/components/ChangePackageModal";
 import { buildClientColorMap } from "@/lib/clientColors";
 import { useSession } from "@/lib/useSession";
+import { useEffectiveRole } from "@/lib/roleView";
+import { canManageBilling } from "@/lib/roleAccess";
+import { feeFor, type Billing, type PackagePrices } from "@/lib/billing";
+import { EMPTY_BILLING, fetchBillingData, type BillingData } from "@/lib/billingData";
+import { iso } from "@/lib/utils";
 
 function formatPrice(price?: number | null): string {
   if (price == null) return "—";
@@ -20,21 +27,34 @@ function formatPrice(price?: number | null): string {
   }).format(price);
 }
 
-function packageLabel(pkg?: string | null): string {
+function packageLabel(packages: PackageMap, pkg?: string | null): string {
   if (!pkg) return "—";
-  return PACKAGES[pkg as keyof typeof PACKAGES]?.label ?? pkg;
+  return packages[pkg]?.label ?? pkg;
 }
 
 function ClientRow({
   client,
   fallbackColor,
   dimmed,
+  showBilling,
+  billing,
+  prices,
+  packages,
+  onChangePackage,
+  onConfigureBilling,
   onColorChange,
   onTogglePause,
 }: {
   client: Client;
   fallbackColor: string;
   dimmed?: boolean;
+  showBilling: boolean;
+  billing?: Billing;
+  prices: PackagePrices;
+  packages: PackageMap;
+  /** Solo roles que manejan cobro pueden cambiar el paquete. */
+  onChangePackage?: (client: Client) => void;
+  onConfigureBilling: (client: Client) => void;
   onColorChange: (clientId: string, color: string) => void;
   onTogglePause: (client: Client) => Promise<void>;
 }) {
@@ -93,10 +113,39 @@ function ClientRow({
       </td>
       <td className="px-4 py-3 text-muted">{formatPrice(client.price)}</td>
       <td className="px-4 py-3">
-        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-panel2 border border-line text-muted">
-          {packageLabel(client.package)}
-        </span>
+        {onChangePackage ? (
+          <button
+            onClick={() => onChangePackage(client)}
+            title="Cambiar paquete"
+            className="flex items-center gap-1.5 rounded-full border border-line bg-panel2 px-2 py-0.5 text-[11px] font-semibold text-muted transition hover:text-text"
+          >
+            {packageLabel(packages, client.package)}
+            <LuPencil className="h-3 w-3" />
+          </button>
+        ) : (
+          <span className="rounded-full border border-line bg-panel2 px-2 py-0.5 text-[11px] font-semibold text-muted" title={client.package && packages[client.package] ? packageSummary(packages[client.package]) : undefined}>
+            {packageLabel(packages, client.package)}
+          </span>
+        )}
       </td>
+      {showBilling && (
+        <td className="px-4 py-3">
+          <button
+            onClick={() => onConfigureBilling(client)}
+            title="Configurar pago mensual"
+            className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] font-medium text-muted transition hover:text-text"
+          >
+            <LuReceipt className="h-3 w-3" />
+            {billing ? (
+              <span className="tabular-nums">
+                Día {billing.pay_day} · {formatPrice(feeFor(billing, client.package, prices))}
+              </span>
+            ) : (
+              "Configurar pago"
+            )}
+          </button>
+        </td>
+      )}
       <td className="px-4 py-3">
         {publicUrl ? (
           <div className="flex items-center gap-1.5">
@@ -154,7 +203,21 @@ export default function ClientesPage() {
   const [loading, setLoading] = useState(true);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [isNewClientOpen, setIsNewClientOpen] = useState(false);
-  const [isPaymentsOpen, setIsPaymentsOpen] = useState(false);
+  const { packages, list: packageOptions } = usePackages();
+  const [packageClient, setPackageClient] = useState<Client | null>(null);
+  const effectiveRole = useEffectiveRole(currentUser?.role);
+  const showBilling = canManageBilling(effectiveRole);
+  const [billingData, setBillingData] = useState<BillingData>(EMPTY_BILLING);
+  const [billingClient, setBillingClient] = useState<Client | null>(null);
+  const todayISO = iso(new Date());
+
+  const loadBilling = async () => {
+    try {
+      setBillingData(await fetchBillingData());
+    } catch (err) {
+      console.error("Error al cargar el cobro:", err);
+    }
+  };
 
   const loadClients = async () => {
     try {
@@ -167,12 +230,16 @@ export default function ClientesPage() {
   useEffect(() => {
     if (!currentUser) return;
     loadClients().then(() => setLoading(false));
-  }, [currentUser]);
+    if (canManageBilling(effectiveRole)) loadBilling();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser, effectiveRole]);
 
   const handleCreateClient: React.ComponentProps<typeof NewClientModal>["onCreate"] = async (input) => {
     setSuccessMsg(null);
-    await createClientWithPackage(input.name, input.packageValue);
-    setSuccessMsg(`Cliente "${input.name}" agregado con ${PACKAGES[input.packageValue].label}.`);
+    const pkg = packages[input.packageValue];
+    if (!pkg) throw new Error("Ese paquete ya no existe.");
+    await createClientWithPackage(input.name, pkg);
+    setSuccessMsg(`Cliente "${input.name}" agregado con ${pkg.label}.`);
     await loadClients();
   };
 
@@ -181,6 +248,7 @@ export default function ClientesPage() {
     await loadClients();
   };
 
+  const billingByClient = new Map(billingData.billings.map((b) => [b.client_id, b]));
   const activeClients = clients.filter((c) => !c.paused);
   const pausedClients = clients.filter((c) => c.paused);
 
@@ -200,12 +268,6 @@ export default function ClientesPage() {
         <div className="p-6 space-y-6">
           <PageHeader crumb="Operación › Clientes" title="Clientes">
               <div className="flex gap-2">
-                <button
-                  onClick={() => setIsPaymentsOpen(true)}
-                  className="flex items-center gap-1 rounded-md border border-line px-4 py-2 text-xs font-semibold text-text hover:bg-panel2"
-                >
-                  <LuReceipt className="h-3.5 w-3.5" /> Pagos
-                </button>
                 <button
                   onClick={() => setIsNewClientOpen(true)}
                   className="flex items-center gap-1 rounded-md bg-gradient-to-r from-brand to-brand2 px-4 py-2 text-xs font-semibold text-white shadow hover:brightness-110"
@@ -229,6 +291,7 @@ export default function ClientesPage() {
                       <th className="px-4 py-2.5 text-eyebrow">Color</th>
                       <th className="px-4 py-2.5 text-eyebrow">Precio</th>
                       <th className="px-4 py-2.5 text-eyebrow">Paquete</th>
+                      {showBilling && <th className="px-4 py-2.5 text-eyebrow">Pago mensual</th>}
                       <th className="px-4 py-2.5 text-eyebrow">Link a su calendario</th>
                       <th className="px-4 py-2.5 text-eyebrow">Acciones</th>
                       <th className="px-4 py-2.5 text-eyebrow">Biblioteca</th>
@@ -242,12 +305,18 @@ export default function ClientesPage() {
                         fallbackColor={fallbackColorFor(client.id)}
                         onColorChange={handleColorChange}
                         onTogglePause={handleTogglePause}
+                        showBilling={showBilling}
+                        billing={billingByClient.get(client.id)}
+                        prices={billingData.prices}
+                        packages={packages}
+                        onChangePackage={showBilling ? setPackageClient : undefined}
+                        onConfigureBilling={setBillingClient}
                       />
                     ))}
 
                     {activeClients.length === 0 && pausedClients.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="px-4 py-6 text-center text-muted italic">
+                        <td colSpan={showBilling ? 8 : 7} className="px-4 py-6 text-center text-muted italic">
                           No hay clientes todavía.
                         </td>
                       </tr>
@@ -256,7 +325,7 @@ export default function ClientesPage() {
                     {pausedClients.length > 0 && (
                       <>
                         <tr>
-                          <td colSpan={7} className="px-4 py-2 bg-panel2/60 border-y border-line">
+                          <td colSpan={showBilling ? 8 : 7} className="px-4 py-2 bg-panel2/60 border-y border-line">
                             <span className="text-[11px] font-bold uppercase text-muted">
                               Pausados ({pausedClients.length})
                             </span>
@@ -267,8 +336,14 @@ export default function ClientesPage() {
                             key={client.id}
                             client={client}
                             fallbackColor={fallbackColorFor(client.id)}
-                                onColorChange={handleColorChange}
+                            onColorChange={handleColorChange}
                             onTogglePause={handleTogglePause}
+                            showBilling={showBilling}
+                            billing={billingByClient.get(client.id)}
+                            prices={billingData.prices}
+                            packages={packages}
+                            onChangePackage={showBilling ? setPackageClient : undefined}
+                            onConfigureBilling={setBillingClient}
                             dimmed
                           />
                         ))}
@@ -284,13 +359,34 @@ export default function ClientesPage() {
       <NewClientModal
         isOpen={isNewClientOpen}
         onClose={() => setIsNewClientOpen(false)}
+        packages={packageOptions}
         onCreate={handleCreateClient}
       />
-      <PaymentsModal
-        isOpen={isPaymentsOpen}
-        onClose={() => setIsPaymentsOpen(false)}
-        clients={clients}
-      />
+      {packageClient && (
+        <ChangePackageModal
+          client={packageClient}
+          packages={packageOptions}
+          onClose={() => setPackageClient(null)}
+          onChanged={() => {
+            setPackageClient(null);
+            loadClients();
+          }}
+        />
+      )}
+      {billingClient && (
+        <BillingModal
+          client={billingClient}
+          billing={billingByClient.get(billingClient.id)}
+          prices={billingData.prices}
+          packages={packages}
+          todayISO={todayISO}
+          onClose={() => setBillingClient(null)}
+          onSaved={() => {
+            setBillingClient(null);
+            loadBilling();
+          }}
+        />
+      )}
     </PageShell>
   );
 }

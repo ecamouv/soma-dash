@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/apiAuth";
 import type { UserRole } from "@/lib/types";
 
-const ROLES: UserRole[] = ["prod", "admin", "community", "editor", "dev"];
+const ROLES: UserRole[] = ["prod", "admin", "community", "editor", "dev", "operaciones"];
 
 function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);

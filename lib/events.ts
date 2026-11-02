@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/client";
 import type { CalendarEvent, Client } from "@/lib/types";
-import { PACKAGES, type PackageValue } from "@/lib/packages";
+import type { PackageDef } from "@/lib/packages";
+import { missingPieceRows } from "@/lib/monthlyPieces";
+import { ensurePostsPerWeek } from "@/lib/pauta";
 import { buildPieceCode, errText, nextCodeNumbers } from "@/lib/utils";
 
 const supabase = createClient();
@@ -169,17 +171,16 @@ export async function setClientColor(clientId: string, color: string | null): Pr
  */
 export async function createClientWithPackage(
   name: string,
-  packageValue: PackageValue
+  pkg: PackageDef
 ): Promise<Client> {
   const { data, error } = await supabase
     .from("clients")
-    .insert({ name, package: packageValue })
+    .insert({ name, package: pkg.value })
     .select("id, name, package")
     .single();
   if (error) throw error;
   const client = data as Client;
 
-  const pkg = PACKAGES[packageValue];
   const month = new Date().getMonth() + 1;
   const rows = (["v", "f"] as const).flatMap((type) =>
     nextCodeNumbers([], type, month, type === "v" ? pkg.reels : pkg.fotos).map((n) => ({
@@ -194,8 +195,51 @@ export async function createClientWithPackage(
     const { error: piecesError } = await supabase.from("content_pieces").insert(rows);
     if (piecesError) throw piecesError;
   }
+  if (pkg.pautaPerWeek > 0) await ensurePostsPerWeek(client.id, pkg.pautaPerWeek);
 
   return client;
+}
+
+export interface PackageChangePlan {
+  /** Mes (1-12) para el que se crean piezas: el siguiente al actual. */
+  month: number;
+  rows: { client_id: string; code: string; type: "v" | "f"; month: number }[];
+}
+
+/**
+ * Qué piezas se crearían al pasar a un cliente a `pkg`: las que faltan para llegar a la cuota
+ * del nuevo paquete en el mes siguiente. Nunca borra ni cambia piezas existentes, y correrlo
+ * de nuevo no duplica (cuenta lo que ya exista de ese mes, igual que el cron mensual).
+ */
+export async function planPackageChange(clientId: string, pkg: PackageDef): Promise<PackageChangePlan> {
+  const month = (new Date().getMonth() + 1) % 12 + 1;
+  // content_pieces no tiene año: se acota a las creadas en los últimos 6 meses, como el cron mensual.
+  const since = new Date(Date.now() - 183 * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from("content_pieces")
+    .select("client_id, code, type")
+    .eq("client_id", clientId)
+    .eq("month", month)
+    .gte("created_at", since);
+  if (error) throw error;
+  const rows = missingPieceRows(
+    [{ id: clientId, package: pkg.value, paused: false }],
+    (data ?? []) as { client_id: string; code: string; type: "v" | "f" }[],
+    month,
+    { [pkg.value]: pkg }
+  );
+  return { month, rows };
+}
+
+/** Cambia el paquete del cliente y crea las piezas del plan. Si hay pauta y no tiene ajuste propio, usa la del paquete. */
+export async function applyPackageChange(clientId: string, pkg: PackageDef, plan: PackageChangePlan): Promise<void> {
+  const { error } = await supabase.from("clients").update({ package: pkg.value }).eq("id", clientId);
+  if (error) throw error;
+  if (plan.rows.length > 0) {
+    const { error: piecesError } = await supabase.from("content_pieces").insert(plan.rows);
+    if (piecesError) throw piecesError;
+  }
+  if (pkg.pautaPerWeek > 0) await ensurePostsPerWeek(clientId, pkg.pautaPerWeek);
 }
 
 /**

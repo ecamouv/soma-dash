@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { LuKeyRound, LuPlus, LuSearch, LuStar, LuArrowUpRight, LuPencil } from "react-icons/lu";
 import AccessModal from "@/components/AccessModal";
 import { PageHeader, PageShell, SessionLoading } from "@/components/ui";
@@ -14,6 +15,8 @@ import {
   type WebAccess,
   type WebAccessInput,
 } from "@/lib/accesses";
+import { canAccess } from "@/lib/roleAccess";
+import { useEffectiveRole } from "@/lib/roleView";
 import { useSession } from "@/lib/useSession";
 
 function SectionPill({ section }: { section: string }) {
@@ -115,7 +118,11 @@ function AccessTable({
 }
 
 export default function AccesosPage() {
+  const router = useRouter();
   const currentUser = useSession();
+  const role = useEffectiveRole(currentUser?.role);
+  // Operaciones no tiene esta sección: redirige sin cargar ni mostrar nada.
+  const blocked = !canAccess(role, "/accesos");
   const [items, setItems] = useState<WebAccess[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -136,8 +143,13 @@ export default function AccesosPage() {
   };
 
   useEffect(() => {
-    if (currentUser) load();
-  }, [currentUser]);
+    if (blocked) router.replace("/");
+  }, [blocked, router]);
+
+  useEffect(() => {
+    if (currentUser && !blocked) load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser, blocked]);
 
   const sections = useMemo(() => {
     const counts = new Map<string, number>();
@@ -170,7 +182,7 @@ export default function AccesosPage() {
     await load();
   };
 
-  if (!currentUser) return <SessionLoading />;
+  if (!currentUser || blocked) return <SessionLoading />;
 
   const favorites = filtered.filter((a) => a.favorite);
   const groups = sections

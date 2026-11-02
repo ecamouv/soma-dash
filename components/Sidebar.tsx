@@ -5,18 +5,22 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { ROLE_LABEL, type UserRole } from "@/lib/types";
 import { useEffectiveRole, useRoleView } from "@/lib/roleView";
-import { LuCalendar, LuPackageCheck, LuCalendarCheck, LuUsers, LuSettings, LuAlbum, LuUsersRound, LuLightbulb } from "react-icons/lu";
+import { canAccess } from "@/lib/roleAccess";
+import { useRevisionCount } from "@/lib/useRevisionCount";
+import { LuCalendar, LuPackageCheck, LuCalendarCheck, LuUsers, LuSettings, LuAlbum, LuUsersRound, LuLightbulb, LuTag } from "react-icons/lu";
 
 function NavLink({
   href,
   label,
   icon: Icon,
   isActive,
+  badge = 0,
 }: {
   href: string;
   label: string;
   icon: React.ComponentType<{ className?: string }> | null;
   isActive: boolean;
+  badge?: number;
 }) {
   return (
     <Link
@@ -42,6 +46,15 @@ function NavLink({
         />
       )}
       <span>{label}</span>
+      {badge > 0 && (
+        <span
+          role="status"
+          aria-label={`${badge} ${badge === 1 ? "pieza" : "piezas"} en revisión`}
+          className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-crimson px-1.5 text-[10px] font-bold tabular-nums text-white"
+        >
+          {badge > 99 ? "99+" : badge}
+        </span>
+      )}
     </Link>
   );
 }
@@ -50,6 +63,8 @@ export default function Sidebar({ role }: { role?: UserRole }) {
   const pathname = usePathname();
   const effectiveRole = useEffectiveRole(role);
   const { viewAs, setViewAs } = useRoleView();
+  // Notificación de Operaciones: piezas esperando respuesta del cliente (en revisión).
+  const revisionCount = useRevisionCount(effectiveRole === "operaciones");
 
   const navItems = [
     { label: "Soma", href: "/", icon: null },
@@ -58,6 +73,7 @@ export default function Sidebar({ role }: { role?: UserRole }) {
     { label: "Publicaciones", href: "/publicaciones", icon: LuCalendarCheck },
     { label: "Inspiración", href: "/inspiracion", icon: LuLightbulb },
     { label: "Clientes", href: "/clientes", icon: LuUsers },
+    { label: "Paquetes", href: "/paquetes", icon: LuTag },
     { label: "Accesos Web", href: "/accesos", icon: LuAlbum },
     { label: "Equipo", href: "/equipo", icon: LuUsersRound },
   ];
@@ -79,7 +95,7 @@ export default function Sidebar({ role }: { role?: UserRole }) {
       {/* Menú de Navegación */}
       <nav className="space-y-1">
         {navItems
-          .filter((item) => !(effectiveRole === "community" && item.href === "/inspiracion"))
+          .filter((item) => canAccess(effectiveRole, item.href))
           .map((item) => (
           <NavLink
             key={item.href}
@@ -87,6 +103,7 @@ export default function Sidebar({ role }: { role?: UserRole }) {
             label={item.label}
             icon={item.icon}
             isActive={pathname === item.href}
+            badge={item.href === "/" ? revisionCount : 0}
           />
         ))}
       </nav>

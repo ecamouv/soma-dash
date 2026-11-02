@@ -39,6 +39,15 @@ export async function savePostsPerWeek(clientId: string, postsPerWeek: number): 
   if (error) throw error;
 }
 
+/** Fija los posts por semana de un cliente solo si todavía no tiene un ajuste propio. */
+export async function ensurePostsPerWeek(clientId: string, postsPerWeek: number): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("pauta_settings")
+    .upsert({ client_id: clientId, posts_per_week: postsPerWeek }, { onConflict: "client_id", ignoreDuplicates: true });
+  if (error) throw error;
+}
+
 /**
  * Posts del mes (year/month) más los que tienen fecha dentro del rango visible del
  * calendario (rangeStart..rangeEnd, YYYY-MM-DD), para que el calendario también muestre

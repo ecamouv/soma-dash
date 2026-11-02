@@ -1,4 +1,4 @@
-import { PACKAGES, type PackageValue } from "./packages.ts";
+import type { PackageMap } from "./packages.ts";
 import { buildPieceCode, nextCodeNumbers } from "./utils.ts";
 
 interface ClientRow {
@@ -18,11 +18,11 @@ interface PieceRow {
  * `month`. `pieces` son las piezas ya existentes de ese mes (incluye las adelantadas),
  * así que correrlo dos veces no duplica nada.
  */
-export function missingPieceRows(clients: ClientRow[], pieces: PieceRow[], month: number) {
+export function missingPieceRows(clients: ClientRow[], pieces: PieceRow[], month: number, packages: PackageMap) {
   return clients
-    .filter((c) => !c.paused && c.package && c.package in PACKAGES)
+    .filter((c) => !c.paused && c.package && c.package in packages)
     .flatMap((c) => {
-      const pkg = PACKAGES[c.package as PackageValue];
+      const pkg = packages[c.package as string];
       const own = pieces.filter((p) => p.client_id === c.id);
       return (["v", "f"] as const).flatMap((type) => {
         const quota = type === "v" ? pkg.reels : pkg.fotos;
